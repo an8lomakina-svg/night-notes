@@ -78,9 +78,16 @@ $('#budgetForm').addEventListener('submit',()=>{const name=$('#transactionName')
 $('#budgetForm').addEventListener('submit',()=>{if(budgetCommentDraft===null)return;const item=state.budget.transactions.at(-1);if(item&&budgetCommentDraft)item.comment=budgetCommentDraft;budgetCommentDraft=null;$('#transactionComment').value='';save();renderBudget()});
 renderBudget();
 
-const autumnJazzRadio = new Audio('https://ice5.somafm.com/illstreet-128-mp3');
+const autumnJazzStreams = [
+  'https://ice2.somafm.com/illstreet-128-mp3',
+  'https://ice5.somafm.com/illstreet-128-mp3'
+];
+const autumnJazzRadio = new Audio();
 autumnJazzRadio.preload = 'none';
 const radioButton = $('#soundToggle');
+let radioSourceIndex = 0;
+let radioRequested = false;
+let radioStarting = false;
 const setRadioState = (playing) => {
   radioButton.textContent = playing ? '❚❚' : '📻';
   const label = playing ? 'Поставить осенний джаз на паузу' : 'Включить осенний джаз';
@@ -89,19 +96,46 @@ const setRadioState = (playing) => {
   radioButton.classList.toggle('playing', playing);
 };
 setRadioState(false);
-radioButton.onclick = async () => {
-  if (autumnJazzRadio.paused) {
+const startAutumnJazz = async () => {
+  if (radioStarting) return false;
+  radioStarting = true;
+  for (let attempt = 0; attempt < autumnJazzStreams.length; attempt += 1) {
+    const sourceIndex = (radioSourceIndex + attempt) % autumnJazzStreams.length;
+    autumnJazzRadio.src = autumnJazzStreams[sourceIndex];
+    autumnJazzRadio.load();
     try {
       await autumnJazzRadio.play();
+      radioSourceIndex = sourceIndex;
       setRadioState(true);
+      radioStarting = false;
+      return true;
     } catch {
-      radioButton.title = 'Не удалось включить радио';
-      radioButton.setAttribute('aria-label', 'Не удалось включить радио');
+      // Пробуем следующий официальный сервер потока.
     }
+  }
+  radioStarting = false;
+  radioRequested = false;
+  radioButton.textContent = '📻';
+  radioButton.title = 'Радио временно недоступно — попробуйте ещё раз';
+  radioButton.setAttribute('aria-label', radioButton.title);
+  return false;
+};
+radioButton.onclick = async () => {
+  if (!radioRequested) {
+    radioRequested = true;
+    radioButton.textContent = '…';
+    radioButton.title = 'Подключаю осенний джаз';
+    radioButton.setAttribute('aria-label', radioButton.title);
+    await startAutumnJazz();
   } else {
+    radioRequested = false;
     autumnJazzRadio.pause();
     setRadioState(false);
   }
 };
-autumnJazzRadio.addEventListener('ended', () => setRadioState(false));
-autumnJazzRadio.addEventListener('error', () => setRadioState(false));
+autumnJazzRadio.addEventListener('ended', () => { radioRequested = false; setRadioState(false); });
+autumnJazzRadio.addEventListener('error', () => {
+  if (!radioRequested) return;
+  radioSourceIndex = (radioSourceIndex + 1) % autumnJazzStreams.length;
+  startAutumnJazz();
+});
