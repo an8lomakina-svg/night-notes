@@ -1,11 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <clipPath id="round"><rect width="64" height="64" rx="14"/></clipPath>
-    <filter id="warm"><feColorMatrix values="1.08 0 0 0 .05  0 .93 0 0 .015  0 0 .72 0 0  0 0 0 1 0"/></filter>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f9deb5"/><stop offset="1" stop-color="#e9a664"/></linearGradient>
+    <linearGradient id="lake" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8eaaa6"/><stop offset="1" stop-color="#496a73"/></linearGradient>
   </defs>
-  <g clip-path="url(#round)">
-    <image href="assets-central-park-daylight.png" width="114" height="64" x="-25" preserveAspectRatio="xMidYMid slice" filter="url(#warm)"/>
-    <rect width="64" height="64" fill="#51331d" opacity=".16"/>
-  </g>
-  <rect x=".75" y=".75" width="62.5" height="62.5" rx="13.25" fill="none" stroke="#f8e5bd" stroke-opacity=".82" stroke-width="1.5"/>
+  <rect width="64" height="64" rx="14" fill="url(#sky)"/>
+  <path d="M0 31h64v12H0z" fill="#b97855" opacity=".36"/>
+  <path d="M7 31V17h7v14m3 0V10h9v21m3 0V15h8v16m3 0V7h10v24" fill="#80564a" opacity=".8"/>
+  <path d="M0 36c10-5 20-3 31 0 14 4 24 1 33-2v30H0z" fill="url(#lake)"/>
+  <path d="M0 41c8-5 14-4 21-1s14 4 22 1 14-2 21 1v22H0z" fill="#7f9c72"/>
+  <path d="M4 45c3-9 13-12 17-5 5-10 16-7 17 4-10 4-25 4-34 1zm31-1c2-9 11-13 16-5 7-8 14-1 13 7-9 3-20 2-29-2z" fill="#b85f35"/>
+  <path d="M8 47c5-3 9-3 14 0M37 46c5-2 10-2 15 0" stroke="#f6d683" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+  <rect x=".75" y=".75" width="62.5" height="62.5" rx="13.25" fill="none" stroke="#fff4da" stroke-width="1.5"/>
 </svg>
