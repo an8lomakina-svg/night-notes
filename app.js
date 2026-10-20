@@ -3,6 +3,14 @@ const state = JSON.parse(localStorage.getItem('night-notes-v1') || 'null') || {
   focus: '', tasks: [{ id: 1, text: 'Прогуляться без наушников', done: false }, { id: 2, text: 'Разобрать одну важную вещь', done: false }],
   plans: { dream: ['Увидеть осенний Нью-Йорк'], next: ['Собрать блокнот под себя'], done: [] }, events: {}, imports: []
 };
+state.focus ??= '';
+state.tasks ??= [];
+state.plans ??= { dream: [], next: [], done: [] };
+state.plans.dream ??= [];
+state.plans.next ??= [];
+state.plans.done ??= [];
+state.events ??= {};
+state.imports ??= [];
 let selectedDate = new Date(); selectedDate.setHours(0,0,0,0); let month = new Date(selectedDate);
 const save = () => { localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); };
 const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
