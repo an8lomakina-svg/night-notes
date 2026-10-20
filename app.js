@@ -77,3 +77,31 @@ let budgetCommentDraft=null;
 $('#budgetForm').addEventListener('submit',()=>{const name=$('#transactionName').value.trim(),amount=Number($('#transactionAmount').value);budgetCommentDraft=name&&amount?$('#transactionComment').value.trim():null},true);
 $('#budgetForm').addEventListener('submit',()=>{if(budgetCommentDraft===null)return;const item=state.budget.transactions.at(-1);if(item&&budgetCommentDraft)item.comment=budgetCommentDraft;budgetCommentDraft=null;$('#transactionComment').value='';save();renderBudget()});
 renderBudget();
+
+const autumnJazzRadio = new Audio('https://ice5.somafm.com/illstreet-128-mp3');
+autumnJazzRadio.preload = 'none';
+const radioButton = $('#soundToggle');
+const setRadioState = (playing) => {
+  radioButton.textContent = playing ? '❚❚' : '📻';
+  const label = playing ? 'Поставить осенний джаз на паузу' : 'Включить осенний джаз';
+  radioButton.title = label;
+  radioButton.setAttribute('aria-label', label);
+  radioButton.classList.toggle('playing', playing);
+};
+setRadioState(false);
+radioButton.onclick = async () => {
+  if (autumnJazzRadio.paused) {
+    try {
+      await autumnJazzRadio.play();
+      setRadioState(true);
+    } catch {
+      radioButton.title = 'Не удалось включить радио';
+      radioButton.setAttribute('aria-label', 'Не удалось включить радио');
+    }
+  } else {
+    autumnJazzRadio.pause();
+    setRadioState(false);
+  }
+};
+autumnJazzRadio.addEventListener('ended', () => setRadioState(false));
+autumnJazzRadio.addEventListener('error', () => setRadioState(false));
