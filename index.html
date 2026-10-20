@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#241d25" />
+    <meta name="description" content="Night Notes — личный блокнот для планов, списков и календаря." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Night Notes</title>
+  </head>
+  <body>
+    <div class="grain"></div>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="wordmark" href="#top" aria-label="Night Notes, наверх">
+          <span class="mark">N</span><span>night<br />notes</span>
+        </a>
+        <nav aria-label="Главное меню">
+          <a class="nav-link active" data-view="today" href="#today"><span>01</span> Сегодня</a>
+          <a class="nav-link" data-view="plans" href="#plans"><span>02</span> Планы</a>
+          <a class="nav-link" data-view="calendar" href="#calendar"><span>03</span> Календарь</a>
+          <a class="nav-link" data-view="archive" href="#archive"><span>04</span> Архив</a>
+          <a class="nav-link" data-view="shopping" href="#shopping"><span>05</span> Покупки</a>
+          <a class="nav-link" data-view="budget" href="#budget"><span>06</span> Бюджет</a>
+          <a class="nav-link" data-view="health" href="#health"><span>07</span> Здоровье</a>
+        </nav>
+        <div class="sidebar-bottom">
+          <p class="mono">NEW YORK / FALL / 1985</p>
+          <button id="themeToggle" class="text-button">◐ приглушить свет</button>
+        </div>
+      </aside>
+
+      <main id="top">
+        <header class="topbar">
+          <p id="dateLine" class="mono"></p>
+          <div class="top-actions">
+            <button class="icon-button" id="quickChatGpt" title="Спросить ChatGPT">✦</button>
+            <button class="icon-button" id="soundToggle" title="Озвучить фокус">♬</button>
+            <button class="profile" title="Ваш профиль">А<span class="status-dot"></span></button>
+          </div>
+        </header>
+
+        <section class="view active" id="today">
+          <div class="hero-title">
+            <p class="eyebrow">GOOD MORNING, ANASTASIA</p>
+            <h1>Осень — хорошее<br /><em>время для себя.</em></h1>
+            <p class="intro">Маленькие планы, важные мысли и место, где день становится твоим.</p>
+            <button id="askChatGpt" class="chatgpt-button"><span>✦</span><span class="chatgpt-label">Спросить ChatGPT</span><small>контекст дня скопируется</small></button>
+            <p class="film-location">CENTRAL PARK / OCTOBER 1983 <span>35MM • EASTMAN COLOR</span></p>
+          </div>
+          <div class="today-grid">
+            <section class="panel focus-card">
+              <div class="panel-heading"><p class="eyebrow">TODAY'S FOCUS</p><span class="tape">one thing</span></div>
+              <textarea id="focusInput" aria-label="Фокус дня" placeholder="Что сделает этот день хорошим?"></textarea>
+              <div class="focus-actions">
+                <span class="mono saved-state" id="focusState">СОХРАНЯЕТСЯ АВТОМАТИЧЕСКИ</span>
+                <button id="listenFocus" class="text-button">озвучить ↗</button>
+              </div>
+            </section>
+            <section class="quote-card">
+              <span class="quote-mark">“</span>
+              <p>New York is not a city.<br />It is a <em>feeling</em> in motion.</p>
+              <span class="mono">— A NOTE TO SELF</span>
+            </section>
+          </div>
+          <section class="tasks-section">
+            <div class="section-title"><div><p class="eyebrow">YOUR DAY</p><h2>Список на сегодня</h2></div><span id="taskProgress" class="progress">0 / 0</span></div>
+            <div id="taskList" class="task-list" aria-live="polite"></div>
+            <form id="addTaskForm" class="add-row">
+              <input id="taskInput" autocomplete="off" placeholder="Добавить что-то в день…" aria-label="Новая задача" />
+              <button type="button" id="voiceTask" class="mic" title="Надиктовать задачу" aria-label="Надиктовать задачу">●</button>
+              <button class="add-button" aria-label="Добавить задачу">+</button>
+            </form>
+            <p id="voiceHint" class="voice-hint" hidden></p>
+          </section>
+        </section>
+
+        <section class="view" id="plans">
+          <div class="page-heading"><p class="eyebrow">LITTLE BY LITTLE</p><h1>Планы<br /><em>без давления.</em></h1></div>
+          <div class="plan-board" id="planBoard">
+            <section class="plan-column" data-plan="dream"><h2>Мечтаю</h2><p>То, к чему тянет</p><div class="plan-items"></div><button class="plan-add">+ добавить мысль</button></section>
+            <section class="plan-column" data-plan="next"><h2>Следующее</h2><p>Выбери немного</p><div class="plan-items"></div><button class="plan-add">+ добавить шаг</button></section>
+            <section class="plan-column" data-plan="done"><h2>Сделано</h2><p>Береги доказательства</p><div class="plan-items"></div><button class="plan-add">+ отметить победу</button></section>
+          </div>
+        </section>
+
+        <section class="view" id="calendar">
+          <div class="page-heading calendar-heading"><div><p class="eyebrow">YOUR RHYTHM</p><h1>Календарь<br /><em>без шума.</em></h1></div><button id="importCalendar" class="outline-button">↑ импорт .ics</button><input id="icsInput" type="file" accept=".ics,text/calendar" hidden /></div>
+          <div class="calendar-layout">
+            <section class="mini-calendar panel"><div class="calendar-nav"><button id="prevMonth">←</button><h2 id="monthTitle"></h2><button id="nextMonth">→</button></div><div class="weekdays"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div><div id="calendarGrid" class="calendar-grid"></div></section>
+            <section class="agenda"><p class="eyebrow" id="agendaLabel">ВЫБЕРИ ДЕНЬ</p><h2 id="agendaTitle">Сегодня</h2><div id="agendaItems" class="agenda-items"></div><form id="eventForm" class="event-form"><input id="eventInput" placeholder="Добавить своё событие" aria-label="Новое событие" /><button>+</button></form>
+              <div class="google-note"><span>G</span><div><strong>Личный Google Calendar</strong><p>Подключён календарь <code>an8lomakina@gmail.com</code>, не рабочий.</p></div></div>
+            </section>
+          </div>
+          <section class="personal-calendar">
+            <div class="personal-calendar-heading"><div><p class="eyebrow">LIVE VIEW</p><h2>Личный календарь</h2></div><a class="calendar-link" href="https://calendar.google.com/calendar/u/0?cid=an8lomakina%40gmail.com" target="_blank" rel="noopener">открыть в Google ↗</a></div>
+            <iframe title="Личный Google Calendar" src="https://calendar.google.com/calendar/embed?src=an8lomakina%40gmail.com&amp;ctz=Europe%2FBelgrade&amp;mode=WEEK&amp;showTitle=0&amp;showPrint=0&amp;showTabs=0&amp;showCalendars=0" loading="lazy"></iframe>
+          </section>
+        </section>
+
+        <section class="view" id="archive"><div class="page-heading"><p class="eyebrow">KEEP THE GOOD STUFF</p><h1>Твой<br /><em>тихий архив.</em></h1></div><div id="archiveList" class="archive-list"></div></section>
+
+        <section class="view" id="shopping"><div class="page-heading"><p class="eyebrow">MARKET NOTES</p><h1>Список<br /><em>покупок.</em></h1></div><div class="utility-layout"><section class="utility-card"><div class="utility-heading"><div><p class="eyebrow">НА ЭТОЙ НЕДЕЛЕ</p><h2>Купить</h2></div><span id="shoppingCount" class="progress">0 шт.</span></div><div id="shoppingList" class="shopping-list"></div><form id="shoppingForm" class="add-row"><input id="shoppingInput" placeholder="Добавить в список…" aria-label="Новая покупка"/><button class="add-button" aria-label="Добавить покупку">+</button></form></section><aside class="side-note"><p class="eyebrow">SMALL JOY</p><p>Покупки — это тоже забота о себе, если они не превращаются в шум.</p></aside></div></section>
+
+        <section class="view" id="budget"><div class="page-heading"><p class="eyebrow">MONEY, GENTLY</p><h1>Личный<br /><em>бюджет.</em></h1></div><div class="budget-summary"><div><p class="eyebrow">ДОХОДЫ</p><strong id="incomeTotal">0 ₽</strong></div><div><p class="eyebrow">РАСХОДЫ</p><strong id="expenseTotal">0 ₽</strong></div><div><p class="eyebrow">ОСТАТОК</p><strong id="balanceTotal">0 ₽</strong></div></div><div class="budget-layout"><section class="utility-card"><div class="utility-heading"><div><p class="eyebrow">РАСПРЕДЕЛЕНИЕ</p><h2>Куда уходит</h2></div></div><div class="chart-wrap"><div id="budgetChart" class="budget-chart" role="img" aria-label="Диаграмма расходов"></div><div id="chartLegend" class="chart-legend"></div></div></section><section class="utility-card"><p class="eyebrow">НОВАЯ ЗАПИСЬ</p><form id="budgetForm" class="budget-form"><select id="transactionType" aria-label="Тип операции"><option value="expense">Расход</option><option value="income">Доход</option></select><input id="transactionName" placeholder="Например, продукты" aria-label="Название операции" required/><input id="transactionAmount" type="number" min="0" step="1" placeholder="Сумма, ₽" aria-label="Сумма" required/><select id="transactionCategory" aria-label="Категория"><option>Продукты</option><option>Дом</option><option>Транспорт</option><option>Здоровье</option><option>Красота</option><option>Досуг</option><option>Другое</option></select><button class="add-button">+</button></form><div id="transactionList" class="transaction-list"></div></section></div></section>
+
+        <section class="view" id="health"><div class="page-heading"><p class="eyebrow">CARE NOTES</p><h1>Здоровье<br /><em>без тревоги.</em></h1></div><div class="health-grid"><section class="utility-card"><div class="utility-heading"><div><p class="eyebrow">СДЕЛАНО</p><h2>Анализы и визиты</h2></div></div><div id="healthDone" class="health-list"></div><form id="healthDoneForm" class="health-form"><input id="healthDoneInput" placeholder="Например, общий анализ крови" aria-label="Сделанный анализ"/><button class="add-button">+</button></form></section><section class="utility-card"><div class="utility-heading"><div><p class="eyebrow">БЕРЕЖНЫЙ ПЛАН</p><h2>Ещё сделать</h2></div></div><div id="healthTodo" class="health-list"></div><form id="healthTodoForm" class="health-form"><input id="healthTodoInput" placeholder="Что нужно запланировать?" aria-label="Запланировать анализ"/><button class="add-button">+</button></form></section></div><p class="health-disclaimer">Этот раздел — личные заметки, не медицинская рекомендация. При вопросах о самочувствии лучше обратиться к врачу.</p></section>
+      </main>
+    </div>
+    <template id="taskTemplate"><article class="task"><button class="checkbox" aria-label="Отметить выполненной"></button><span class="task-text"></span><button class="delete" aria-label="Удалить задачу">×</button></article></template>
+    <script src="app.js"></script>
+  </body>
+</html>
