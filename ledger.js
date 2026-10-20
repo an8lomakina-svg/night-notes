@@ -19,7 +19,7 @@
   const currency = document.createElement('select');
   currency.id = 'transactionCurrency';
   currency.setAttribute('aria-label', 'Валюта');
-  currency.innerHTML = '<option value="RSD">RSD · динары</option><option value="EUR">EUR · евро</option><option value="RUB">RUB · рубли</option>';
+  currency.innerHTML = '<option value="RSD">RSD · динары</option><option value="EUR">EUR · евро</option><option value="RUB">RUB · рубли</option><option value="AMD">AMD · драмы</option>';
   const date = document.createElement('input');
   date.id = 'transactionDate';
   date.type = 'date';
@@ -33,7 +33,7 @@
   filter.id = 'budgetCurrencyFilter';
   filter.className = 'budget-filter';
   filter.setAttribute('aria-label', 'Валюта диаграммы');
-  filter.innerHTML = '<option value="RSD">RSD · динары</option><option value="EUR">EUR · евро</option><option value="RUB">RUB · рубли</option>';
+  filter.innerHTML = '<option value="RSD">RSD · динары</option><option value="EUR">EUR · евро</option><option value="RUB">RUB · рубли</option><option value="AMD">AMD · драмы</option>';
   chartPanel.querySelector('.utility-heading').append(filter);
 
   const colors = ['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];
