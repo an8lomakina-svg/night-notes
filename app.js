@@ -31,16 +31,73 @@ const activateView = (viewName, shouldScroll = false) => {
   if (shouldScroll) window.scrollTo({top:0,behavior:'smooth'});
 };
 document.querySelectorAll('.nav-link').forEach(button => button.onclick = () => activateView(button.dataset.view, true));
-activateView(window.location.hash.slice(1));
-window.addEventListener('hashchange', () => activateView(window.location.hash.slice(1)));
+const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+const googleCalendar = {
+  clientId: localStorage.getItem('night-notes-google-client-id') || '',
+  accessToken: null,
+  events: {},
+  tokenClient: null
+};
+const googleEventsFor = key => googleCalendar.events[key] || [];
 function allEvents(key){return [
   ...(state.events[key]||[]).map((event,index)=>({...event,source:'local',index})),
-  ...state.imports.map((event,index)=>event.date===key?{...event,source:'import',index}:null).filter(Boolean)
+  ...state.imports.map((event,index)=>event.date===key?{...event,source:'import',index}:null).filter(Boolean),
+  ...googleEventsFor(key)
 ]}
+activateView(window.location.hash.slice(1));
+window.addEventListener('hashchange', () => activateView(window.location.hash.slice(1)));
 function renderCalendar(){ const y=month.getFullYear(),m=month.getMonth();$('#monthTitle').textContent=new Intl.DateTimeFormat('ru-RU',{month:'long',year:'numeric'}).format(month);const grid=$('#calendarGrid');grid.innerHTML=''; const start=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(); for(let i=0;i<start;i++){let e=document.createElement('span');e.className='day empty';grid.append(e)} for(let d=1;d<=days;d++){const date=new Date(y,m,d),k=dateKey(date),b=document.createElement('button');b.className='day'+(dateKey(new Date())===k?' today':'')+(dateKey(selectedDate)===k?' selected':'')+(allEvents(k).length?' has-event':'');b.textContent=d;b.onclick=()=>{selectedDate=date;renderCalendar();renderAgenda()};grid.append(b)} renderAgenda();}
-function renderAgenda(){const k=dateKey(selectedDate), events=allEvents(k);$('#agendaLabel').textContent=niceDate(selectedDate).toUpperCase();$('#agendaTitle').textContent=dateKey(selectedDate)===dateKey(new Date())?'Сегодня':'На этот день';const box=$('#agendaItems');box.innerHTML=events.length?'':'<p class="empty">Пока здесь свободно. В этом тоже есть свой ритм.</p>';events.forEach(e=>{const x=document.createElement('div');x.className='event';x.innerHTML=`<span class="event-time">${e.time||'ВЕСЬ ДЕНЬ'}</span><span class="event-title"></span><button class="delete" type="button" aria-label="Удалить событие">×</button>`;x.querySelector('.event-title').textContent=e.title;x.querySelector('.delete').onclick=()=>{if(e.source==='local'){state.events[k].splice(e.index,1);if(!state.events[k].length)delete state.events[k]}else{state.imports.splice(e.index,1)}save();renderCalendar()};box.append(x)})}
-$('#prevMonth').onclick=()=>{month.setMonth(month.getMonth()-1);renderCalendar()};$('#nextMonth').onclick=()=>{month.setMonth(month.getMonth()+1);renderCalendar()}; $('#eventForm').addEventListener('submit',e=>{e.preventDefault();const x=$('#eventInput');if(!x.value.trim())return;const k=dateKey(selectedDate);(state.events[k]??=[]).push({title:x.value.trim(),time:'МОЙ ПЛАН'});x.value='';save();renderCalendar()});
+function validEventTime(value){return !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value)}
+function promptEventChange(event){
+  const title=prompt('Название события:',event.title);
+  if(title===null||!title.trim())return null;
+  const currentTime=event.time==='ВЕСЬ ДЕНЬ'?'':event.time;
+  const time=prompt('Время в формате ЧЧ:ММ. Оставьте пустым для события на весь день:',currentTime);
+  if(time===null||!validEventTime(time.trim())){if(time!==null)alert('Введите время в формате ЧЧ:ММ.');return null}
+  return {title:title.trim(),time:time.trim()||'ВЕСЬ ДЕНЬ'};
+}
+function updateLocalEvent(event,key){
+  const change=promptEventChange(event);if(!change)return;
+  const target=event.source==='local'?state.events[key][event.index]:state.imports[event.index];
+  Object.assign(target,change);save();renderCalendar();
+}
+function renderAgenda(){const k=dateKey(selectedDate), events=allEvents(k);$('#agendaLabel').textContent=niceDate(selectedDate).toUpperCase();$('#agendaTitle').textContent=dateKey(selectedDate)===dateKey(new Date())?'Сегодня':'На этот день';const box=$('#agendaItems');box.innerHTML=events.length?'':'<p class="empty">Пока здесь свободно. В этом тоже есть свой ритм.</p>';events.forEach(e=>{const x=document.createElement('div');x.className='event';x.innerHTML=`<span class="event-time"></span><span class="event-title"></span><span class="event-actions"><button class="event-edit" type="button" aria-label="Изменить событие">Изменить</button><button class="delete" type="button" aria-label="Удалить событие">×</button></span>`;x.querySelector('.event-time').textContent=e.time||'ВЕСЬ ДЕНЬ';x.querySelector('.event-title').textContent=e.title;x.querySelector('.event-edit').onclick=()=>e.source==='google'?updateGoogleEvent(e,k):updateLocalEvent(e,k);x.querySelector('.delete').onclick=()=>e.source==='google'?deleteGoogleEvent(e):deleteLocalEvent(e,k);box.append(x)})}
+function deleteLocalEvent(event,key){if(!confirm('Удалить это событие?'))return;if(event.source==='local'){state.events[key].splice(event.index,1);if(!state.events[key].length)delete state.events[key]}else{state.imports.splice(event.index,1)}save();renderCalendar()}
+$('#prevMonth').onclick=()=>{month.setMonth(month.getMonth()-1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#nextMonth').onclick=()=>{month.setMonth(month.getMonth()+1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)}; $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const x=$('#eventInput'),time=$('#eventTime');if(!x.value.trim())return;const k=dateKey(selectedDate);if(googleCalendar.accessToken){try{await createGoogleEvent(x.value.trim(),k,time.value);x.value='';time.value='';await refreshGoogleEvents()}catch(error){showGoogleError(error)}}else{(state.events[k]??=[]).push({title:x.value.trim(),time:time.value||'ВЕСЬ ДЕНЬ'});x.value='';time.value='';save();renderCalendar()}});
 $('#importCalendar').onclick=()=>$('#icsInput').click();$('#icsInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;const raw=await f.text();let added=0;raw.split('BEGIN:VEVENT').slice(1).forEach(block=>{const val=(name)=>block.match(new RegExp(name+'(?:;[^:]*)?:(.+)'))?.[1]?.trim();const dt=val('DTSTART'),title=val('SUMMARY');if(dt&&title){const date=`${dt.slice(0,4)}-${dt.slice(4,6)}-${dt.slice(6,8)}`;const time=dt.includes('T')?`${dt.slice(9,11)}:${dt.slice(11,13)}`:'ВЕСЬ ДЕНЬ';state.imports.push({date,title,time});added++}});save();renderCalendar();alert(`Импортировано событий: ${added}`);e.target.value=''};
+const clientIdInput=$('#googleCalendarClientId'),connectGoogleCalendar=$('#connectGoogleCalendar'),calendarSyncState=$('#calendarSyncState');
+clientIdInput.value=googleCalendar.clientId;
+const setGoogleStatus=(message,isError=false)=>{calendarSyncState.textContent=message;calendarSyncState.classList.toggle('is-error',isError)};
+const showGoogleError=error=>{console.error(error);setGoogleStatus(`Не удалось синхронизировать календарь: ${error.message||'попробуйте ещё раз'}`,true)};
+function loadGoogleIdentity(){return new Promise((resolve,reject)=>{if(window.google?.accounts?.oauth2)return resolve();const existing=document.querySelector('script[data-google-identity]');if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',()=>reject(new Error('Не удалось загрузить Google OAuth')),{once:true});return}const script=document.createElement('script');script.src='https://accounts.google.com/gsi/client';script.async=true;script.defer=true;script.dataset.googleIdentity='true';script.onload=resolve;script.onerror=()=>reject(new Error('Не удалось загрузить Google OAuth'));document.head.append(script)})}
+function googleEventPayload(title,date,time){
+  if(!time)return {summary:title,start:{date},end:{date:dateKey(new Date(new Date(`${date}T12:00:00`).getTime()+86400000))}};
+  const start=new Date(`${date}T${time}:00`),end=new Date(start.getTime()+60*60*1000);
+  const localDateTime=value=>`${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}T${String(value.getHours()).padStart(2,'0')}:${String(value.getMinutes()).padStart(2,'0')}:00`;
+  return {summary:title,start:{dateTime:localDateTime(start),timeZone:'Europe/Belgrade'},end:{dateTime:localDateTime(end),timeZone:'Europe/Belgrade'}};
+}
+async function googleApi(path,options={}){if(!googleCalendar.accessToken)throw new Error('Сначала подключите Google Calendar');const response=await fetch(`https://www.googleapis.com/calendar/v3${path}`,{...options,headers:{Authorization:`Bearer ${googleCalendar.accessToken}`,'Content-Type':'application/json',...(options.headers||{})}});if(!response.ok){const data=await response.json().catch(()=>null);throw new Error(data?.error?.message||`Google Calendar вернул код ${response.status}`)}return response.status===204?null:response.json()}
+async function refreshGoogleEvents(){
+  if(!googleCalendar.accessToken)return;
+  const first=new Date(month.getFullYear(),month.getMonth(),1),last=new Date(month.getFullYear(),month.getMonth()+1,1);
+  const query=new URLSearchParams({singleEvents:'true',orderBy:'startTime',timeMin:first.toISOString(),timeMax:last.toISOString(),maxResults:'2500'});
+  const data=await googleApi(`/calendars/primary/events?${query}`);
+  googleCalendar.events={};
+  (data.items||[]).forEach(item=>{const date=item.start?.dateTime?.slice(0,10)||item.start?.date;if(!date)return;const time=item.start?.dateTime?.slice(11,16)||'ВЕСЬ ДЕНЬ';(googleCalendar.events[date]??=[]).push({source:'google',googleId:item.id,title:item.summary||'Без названия',time})});
+  setGoogleStatus('Google Calendar подключён. Создание, изменение и удаление применяются к вашему календарю.');renderCalendar();
+}
+async function createGoogleEvent(title,date,time){await googleApi('/calendars/primary/events',{method:'POST',body:JSON.stringify(googleEventPayload(title,date,time))})}
+async function updateGoogleEvent(event,date){const change=promptEventChange(event);if(!change)return;await googleApi(`/calendars/primary/events/${encodeURIComponent(event.googleId)}`,{method:'PATCH',body:JSON.stringify(googleEventPayload(change.title,date,change.time==='ВЕСЬ ДЕНЬ'?'':change.time))});await refreshGoogleEvents()}
+async function deleteGoogleEvent(event){if(!confirm(`Удалить «${event.title}» из Google Calendar?`))return;try{await googleApi(`/calendars/primary/events/${encodeURIComponent(event.googleId)}`,{method:'DELETE'});await refreshGoogleEvents()}catch(error){showGoogleError(error)}}
+connectGoogleCalendar.onclick=async()=>{
+  const clientId=clientIdInput.value.trim();
+  if(!clientId){setGoogleStatus('Введите OAuth Client ID из Google Cloud.',true);return}
+  try{
+    setGoogleStatus('Открываю вход в Google…');await loadGoogleIdentity();localStorage.setItem('night-notes-google-client-id',clientId);googleCalendar.clientId=clientId;
+    googleCalendar.tokenClient=window.google.accounts.oauth2.initTokenClient({client_id:clientId,scope:GOOGLE_CALENDAR_SCOPE,callback:async response=>{if(response.error){showGoogleError(new Error(response.error));return}googleCalendar.accessToken=response.access_token;try{await refreshGoogleEvents()}catch(error){showGoogleError(error)}}});
+    googleCalendar.tokenClient.requestAccessToken({prompt:'consent'});
+  }catch(error){showGoogleError(error)}
+};
 function renderArchive(){const entries=[...state.tasks.filter(t=>t.done).map(t=>({text:t.text,type:'ЗАДАЧА',source:'task',id:t.id})),...state.plans.done.map((text,index)=>({text,type:'ПОБЕДА',source:'plan',index}))];const b=$('#archiveList');b.innerHTML=entries.length?'':'<p class="empty">Архив ещё ждёт первых маленьких побед.</p>';entries.forEach(x=>{const el=document.createElement('article');el.className='archive-entry';el.innerHTML=`<time>${x.type} · ${niceDate(new Date()).toUpperCase()}</time><p></p><button class="delete" type="button" aria-label="Удалить запись из архива">×</button>`;el.querySelector('p').textContent=x.text;el.querySelector('.delete').onclick=()=>{if(x.source==='task')state.tasks=state.tasks.filter(task=>task.id!==x.id);else state.plans.done.splice(x.index,1);save();renderTasks();renderPlans()};b.append(el)})} renderArchive();
 const setHint=(x)=>{const h=$('#voiceHint');h.hidden=!x;h.textContent=x}; const SR=window.SpeechRecognition||window.webkitSpeechRecognition; $('#voiceTask').onclick=()=>{if(!SR){setHint('Голосовой ввод поддерживается в Chrome и Edge.');return}const r=new SR();r.lang='ru-RU';r.interimResults=false;$('#voiceTask').classList.add('listening');setHint('Слушаю… скажите задачу.');r.start();r.onresult=e=>{$('#taskInput').value=e.results[0][0].transcript;setHint('Готово — можно добавить.');};r.onerror=()=>setHint('Не удалось услышать запись. Попробуйте ещё раз.');r.onend=()=>$('#voiceTask').classList.remove('listening')};
 function speak(text){if(!('speechSynthesis'in window)||!text.trim())return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='ru-RU';u.rate=.93;window.speechSynthesis.speak(u)} $('#listenFocus').onclick=()=>speak(state.focus||'Пока фокус дня не записан.');$('#soundToggle').onclick=()=>speak(state.focus||'Добро пожаловать в Night Notes.');const themeToggle=$('#themeToggle');const syncThemeToggle=()=>{const dimmed=document.body.classList.contains('night');themeToggle.setAttribute('aria-pressed',String(dimmed));themeToggle.setAttribute('aria-label',dimmed?'Включить яркий свет':'Приглушить свет');themeToggle.textContent=dimmed?'◑ включить яркий свет':'◐ приглушить свет'};themeToggle.onclick=()=>{document.body.classList.toggle('night');syncThemeToggle()};syncThemeToggle();
