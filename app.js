@@ -81,8 +81,8 @@ renderBudget();
 const radioButton = $('#soundToggle');
 const autumnJazzRadio = $('#autumnJazzRadio');
 const autumnJazzStreams = [
-  'https://ice2.somafm.com/illstreet-128-mp3',
-  'https://ice5.somafm.com/illstreet-128-mp3'
+  'https://ice2.somafm.com/illstreet-128-aac',
+  'https://ice5.somafm.com/illstreet-128-aac'
 ];
 let radioSourceIndex = 0;
 let radioIsOn = false;
@@ -100,9 +100,7 @@ const startAutumnJazz = async () => {
     const sourceIndex = (radioSourceIndex + attempt) % autumnJazzStreams.length;
     autumnJazzRadio.src = autumnJazzStreams[sourceIndex];
     try {
-      autumnJazzRadio.muted = true;
       await autumnJazzRadio.play();
-      autumnJazzRadio.muted = false;
       radioSourceIndex = sourceIndex;
       radioIsOn = true;
       radioIsStarting = false;
