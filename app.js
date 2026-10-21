@@ -418,9 +418,13 @@ sendSyncLink?.addEventListener('click', async () => {
   redirect.hash = '';
   const { error } = await cloudClient.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect.toString() } });
   sendSyncLink.disabled = false;
-  syncMessage.textContent = error
-    ? `Не удалось отправить ссылку: ${error.message}`
-    : 'Ссылка отправлена. Открой письмо и вернись в блокнот.';
+  if (error) {
+    syncMessage.textContent = /rate limit/i.test(error.message)
+      ? 'Лимит писем временно исчерпан. Используй уже полученную ссылку или попробуй позже.'
+      : `Не удалось отправить ссылку: ${error.message}`;
+  } else {
+    syncMessage.textContent = 'Ссылка отправлена. Открой письмо и вернись в блокнот.';
+  }
 });
 
 syncSignOut?.addEventListener('click', async () => {
