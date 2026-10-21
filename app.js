@@ -34,13 +34,92 @@ state.events ??= {};
 state.imports ??= [];
 state.archive ??= [];
 state.selfCareDaily ??= {};
-const SYNC_CONFIG = { url: 'https://itlexbflfueafmgalpgk.supabase.co', key: 'sb_publishable_9_uhNczHfU3M7psgWMUptw_BLoK2RCq' };
+const SYNC_CONFIG = { url: 'https://ucwiohxqtmdzlsboveie.supabase.co', key: 'sb_publishable_MACL1sYFp5rUQAkB26M4kQ_Bys6WsD1' };
 let cloudClient = null, cloudUser = null, cloudSyncTimer = null, cloudHydrating = false;
+let sharedSync = null, sharedSyncTimer = null, sharedHydrating = false;
 let selectedDate = new Date(); selectedDate.setHours(0,0,0,0); let month = new Date(selectedDate);
-const save = () => { localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); queueCloudSave(); };
+const save = () => { localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); queueCloudSave(); queueSharedSave(); };
 function setSyncStatus(message, synced = false) { const button = $('#syncAccount'); if (!button) return; button.classList.toggle('is-synced', synced); button.title = message; button.setAttribute('aria-label', message); }
 function queueCloudSave() { if (!cloudClient || !cloudUser || cloudHydrating) return; clearTimeout(cloudSyncTimer); cloudSyncTimer = setTimeout(pushCloudState, 650); }
 async function pushCloudState() { if (!cloudClient || !cloudUser) return; const { error } = await cloudClient.from('notebook_state').upsert({ user_id: cloudUser.id, payload: state, updated_at: new Date().toISOString() }); if (error) setSyncStatus('Ошибка синхронизации'); else setSyncStatus(`Синхронизировано: ${cloudUser.email || 'твой аккаунт'}`, true); }
+
+const SHARED_SECRET_KEY = 'night-notes-shared-secret-v1';
+const bytesToBase64 = bytes => btoa(String.fromCharCode(...bytes));
+const base64ToBytes = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
+const base64UrlEncode = bytes => bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+const base64UrlDecode = value => base64ToBytes(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4));
+const newSharedSecret = () => base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+async function sharedId(secret) {
+  const digest = await crypto.subtle.digest('SHA-256', base64UrlDecode(secret));
+  return base64UrlEncode(new Uint8Array(digest));
+}
+async function sharedKey(secret) {
+  return crypto.subtle.importKey('raw', base64UrlDecode(secret), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+async function encryptSharedState(secret, value) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await sharedKey(secret), new TextEncoder().encode(JSON.stringify(value)));
+  return { v: 1, iv: base64UrlEncode(iv), ciphertext: base64UrlEncode(new Uint8Array(encrypted)), updatedAt: new Date().toISOString() };
+}
+async function decryptSharedState(secret, payload) {
+  if (!payload?.ciphertext || !payload?.iv) return null;
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64UrlDecode(payload.iv) }, await sharedKey(secret), base64UrlDecode(payload.ciphertext));
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+function sharedSecretFromLocation() {
+  const match = window.location.hash.match(/(?:^#|&)sync=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : localStorage.getItem(SHARED_SECRET_KEY);
+}
+async function ensureSharedSync() {
+  if (!cloudClient) return null;
+  if (!sharedSync) {
+    const secret = sharedSecretFromLocation() || newSharedSecret();
+    localStorage.setItem(SHARED_SECRET_KEY, secret);
+    sharedSync = { secret, id: await sharedId(secret) };
+  }
+  return sharedSync;
+}
+function queueSharedSave() {
+  if (!cloudClient || !sharedSync || sharedHydrating) return;
+  clearTimeout(sharedSyncTimer);
+  sharedSyncTimer = setTimeout(pushSharedState, 700);
+}
+async function pushSharedState() {
+  if (!cloudClient || !sharedSync || sharedHydrating) return;
+  const payload = await encryptSharedState(sharedSync.secret, state);
+  const { error } = await cloudClient.rpc('save_shared_notebook', { p_sync_id: sharedSync.id, p_payload: payload });
+  if (error) setSyncStatus('Ошибка приватной синхронизации');
+  else setSyncStatus('Приватная ссылка синхронизирована', true);
+}
+async function hydrateSharedState() {
+  if (!cloudClient || !sharedSync) return;
+  sharedHydrating = true;
+  setSyncStatus('Загружаю общий блокнот…');
+  const { data, error } = await cloudClient.rpc('get_shared_notebook', { p_sync_id: sharedSync.id });
+  if (error) {
+    sharedHydrating = false;
+    setSyncStatus('Ошибка приватной синхронизации');
+    if (syncMessage) syncMessage.textContent = 'Не удалось открыть приватную ссылку. Попробуй обновить страницу.';
+    return;
+  }
+  const localSnapshot = JSON.parse(JSON.stringify(state));
+  let remoteState = null;
+  try { remoteState = data ? await decryptSharedState(sharedSync.secret, data) : null; } catch { remoteState = null; }
+  if (remoteState && hasNotebookEntries(localSnapshot) && !hasNotebookEntries(remoteState)) {
+    await pushSharedState();
+  } else if (remoteState) {
+    Object.keys(state).forEach(key => delete state[key]);
+    Object.assign(state, remoteState);
+    normalizeCloudState();
+    localStorage.setItem('night-notes-v1', JSON.stringify(state));
+    renderCloudState();
+  } else {
+    await pushSharedState();
+  }
+  sharedHydrating = false;
+  setSyncStatus('Приватная ссылка синхронизирована', true);
+  if (syncMessage) syncMessage.textContent = 'Общий блокнот подключён. Все изменения шифруются в браузере.';
+}
 const archiveRecord=(record)=>state.archive.unshift({id:`archive-${Date.now()}-${Math.random().toString(16).slice(2)}`,archivedAt:new Date().toISOString(),...record});
 const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const niceDate = (d) => new Intl.DateTimeFormat('ru-RU',{weekday:'long',day:'numeric',month:'long'}).format(d);
@@ -385,6 +464,8 @@ async function initCloudSync() {
     return;
   }
   cloudClient = window.supabase.createClient(SYNC_CONFIG.url, SYNC_CONFIG.key);
+  await ensureSharedSync();
+  await hydrateSharedState();
   const { data: { session } } = await cloudClient.auth.getSession();
   cloudUser = session?.user || null;
   if (syncSignOut) syncSignOut.hidden = !cloudUser;
@@ -404,46 +485,20 @@ $('#syncAccount').onclick = () => {
     syncMessage.textContent = `Синхронизировано для ${cloudUser.email || 'твоего аккаунта'}.`;
     syncSignOut.hidden = false;
   } else {
-    syncMessage.textContent = 'Выбери вход через Google — это не использует почтовый лимит. Почта остаётся запасным вариантом.';
+    syncMessage.textContent = sharedSync ? 'Приватный блокнот подключён. Создай ссылку, чтобы открыть его на телефоне.' : 'Создай приватную ссылку для телефона.';
     syncSignOut.hidden = true;
   }
   syncDialog.showModal();
 };
 
-googleSync?.addEventListener('click', async () => {
-  if (!cloudClient) return;
-  googleSync.disabled = true;
-  syncMessage.textContent = 'Открываю безопасный вход Google…';
-  const redirect = new URL(window.location.href);
-  redirect.hash = '';
-  const { error } = await cloudClient.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: redirect.toString() }
-  });
-  if (error) {
-    googleSync.disabled = false;
-    syncMessage.textContent = /provider.*(not|disabled|enable)|unsupported/i.test(error.message)
-      ? 'Google-вход ещё не включён в настройках проекта. Пока используй ссылку из почты — она сохранит тот же общий блокнот.'
-      : `Не удалось открыть вход Google: ${error.message}`;
-  }
-});
-
-sendSyncLink?.addEventListener('click', async () => {
-  const email = syncEmail.value.trim();
-  if (!email || !cloudClient) return;
-  sendSyncLink.disabled = true;
-  syncMessage.textContent = 'Отправляю ссылку на почту…';
-  const redirect = new URL(window.location.href);
-  redirect.hash = '';
-  const { error } = await cloudClient.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect.toString() } });
-  sendSyncLink.disabled = false;
-  if (error) {
-    syncMessage.textContent = /rate limit/i.test(error.message)
-      ? 'Лимит писем временно исчерпан. Используй уже полученную ссылку или попробуй позже.'
-      : `Не удалось отправить ссылку: ${error.message}`;
-  } else {
-    syncMessage.textContent = 'Ссылка отправлена. Открой письмо и вернись в блокнот.';
-  }
+$('#createShareLink')?.addEventListener('click', async () => {
+  const sync = await ensureSharedSync();
+  if (!sync) return;
+  await pushSharedState();
+  const link = new URL(window.location.href);
+  link.hash = `sync=${encodeURIComponent(sync.secret)}`;
+  try { await navigator.clipboard.writeText(link.toString()); } catch {}
+  syncMessage.textContent = 'Приватная ссылка скопирована. Открой её на телефоне — блокнот загрузится автоматически.';
 });
 
 syncSignOut?.addEventListener('click', async () => {
