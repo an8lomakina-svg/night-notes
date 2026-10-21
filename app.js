@@ -470,12 +470,12 @@ async function initCloudSync() {
   cloudUser = session?.user || null;
   if (syncSignOut) syncSignOut.hidden = !cloudUser;
   if (cloudUser) await hydrateCloudState();
-  else setSyncStatus('Войти и синхронизировать');
+  else setSyncStatus(sharedSync ? 'Приватная ссылка синхронизирована' : 'Создать приватную ссылку', Boolean(sharedSync));
   cloudClient.auth.onAuthStateChange((_event, nextSession) => {
     cloudUser = nextSession?.user || null;
     if (syncSignOut) syncSignOut.hidden = !cloudUser;
     if (cloudUser) setTimeout(() => hydrateCloudState(), 0);
-    else setSyncStatus('Войти и синхронизировать');
+    else setSyncStatus(sharedSync ? 'Приватная ссылка синхронизирована' : 'Создать приватную ссылку', Boolean(sharedSync));
   });
 }
 
