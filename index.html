@@ -43,6 +43,9 @@
           <div class="top-actions">
             <button class="icon-button" id="quickChatGpt" title="Спросить ChatGPT">✦</button>
             <button class="icon-button" id="soundToggle" title="Включить осенний джаз" aria-label="Включить осенний джаз">📻</button>
+            <button class="icon-button data-button" id="exportData" title="Скачать данные блокнота" aria-label="Скачать данные блокнота">⇩</button>
+            <button class="icon-button data-button" id="importData" title="Загрузить данные блокнота" aria-label="Загрузить данные блокнота">⇧</button>
+            <input id="dataFileInput" type="file" accept="application/json,.json" hidden />
             <span class="profile" aria-label="Профиль Anastasia">A<span class="status-dot"></span></span>
           </div>
         </header>
@@ -113,6 +116,6 @@
     </div>
     <template id="taskTemplate"><article class="task"><button class="checkbox" aria-label="Отметить выполненной"></button><span class="task-text"></span><button class="archive-action" aria-label="Архивировать задачу">↙</button><button class="delete" aria-label="Удалить задачу">×</button></article></template>
     <audio id="autumnJazzRadio" preload="none" playsinline></audio>
-    <script src="app.js?v=35"></script>
+    <script src="app.js?v=36"></script>
   </body>
 </html>
