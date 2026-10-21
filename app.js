@@ -79,9 +79,57 @@ $('#budgetForm').addEventListener('submit',()=>{if(budgetCommentDraft===null)ret
 renderBudget();
 
 const radioButton = $('#soundToggle');
-const autumnJazzPlayer = 'https://somafm.com/player/#/now-playing/illstreet';
-radioButton.title = 'Открыть осенний джаз';
-radioButton.setAttribute('aria-label', radioButton.title);
+const autumnJazzRadio = $('#autumnJazzRadio');
+const autumnJazzStreams = [
+  'https://ice2.somafm.com/illstreet-128-mp3',
+  'https://ice5.somafm.com/illstreet-128-mp3'
+];
+let radioSourceIndex = 0;
+let radioIsOn = false;
+let radioIsStarting = false;
+const setRadioButton = (isPlaying, message) => {
+  radioButton.textContent = isPlaying ? '❚❚' : '📻';
+  const label = message || (isPlaying ? 'Поставить осенний джаз на паузу' : 'Включить осенний джаз');
+  radioButton.title = label;
+  radioButton.setAttribute('aria-label', label);
+};
+const startAutumnJazz = async () => {
+  if (radioIsStarting) return;
+  radioIsStarting = true;
+  for (let attempt = 0; attempt < autumnJazzStreams.length; attempt += 1) {
+    const sourceIndex = (radioSourceIndex + attempt) % autumnJazzStreams.length;
+    autumnJazzRadio.src = autumnJazzStreams[sourceIndex];
+    try {
+      await autumnJazzRadio.play();
+      radioSourceIndex = sourceIndex;
+      radioIsOn = true;
+      radioIsStarting = false;
+      setRadioButton(true);
+      return;
+    } catch {
+      // Переключаемся на второй официальный сервер SomaFM.
+    }
+  }
+  radioIsStarting = false;
+  radioIsOn = false;
+  setRadioButton(false, 'Не удалось включить радио — попробуйте ещё раз');
+};
+setRadioButton(false);
 radioButton.onclick = () => {
-  window.open(autumnJazzPlayer, '_blank', 'noopener,noreferrer');
+  if (radioIsOn) {
+    radioIsOn = false;
+    autumnJazzRadio.pause();
+    setRadioButton(false);
+    return;
+  }
+  setRadioButton(false, 'Подключаю осенний джаз');
+  startAutumnJazz();
+};
+autumnJazzRadio.addEventListener('error', () => {
+  if (!radioIsOn || radioIsStarting) return;
+  radioIsOn = false;
+  radioSourceIndex = (radioSourceIndex + 1) % autumnJazzStreams.length;
+  startAutumnJazz();
+});
+autumnJazzRadio.addEventListener('ended', () => { radioIsOn = false; setRadioButton(false); });
 };
