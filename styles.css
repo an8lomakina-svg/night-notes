@@ -90,3 +90,13 @@ body.night .film-location span { color:#965e2f; }
 .sync-button.is-synced,.profile.is-synced { border-color:#9aa881; color:#54784f; }
 .profile:focus-visible { outline:2px solid #c87532; outline-offset:3px; }
 @media (max-width:760px) { .sync-dialog-card { padding:20px; }.sync-dialog-actions { flex-wrap:wrap; }.sync-dialog-actions .outline-button { width:100%; margin-right:0; } }
+
+
+/* Keep account, radio and ChatGPT controls reachable on phones. */
+@media (max-width:760px) {
+  .topbar { position:sticky; top:0; z-index:6; min-height:52px; height:52px; padding:0 2px; background:rgba(255,251,243,.95); backdrop-filter:blur(10px); }
+  .topbar #dateLine { display:none; }
+  .topbar .top-actions { display:flex; margin-left:auto; gap:8px; }
+  .topbar .icon-button, .topbar .profile { width:36px; height:36px; font-size:16px; }
+  .topbar .profile { font-size:15px; }
+}
