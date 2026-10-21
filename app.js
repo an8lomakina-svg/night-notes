@@ -122,15 +122,15 @@ renderBudget();
 const radioButton = $('#soundToggle');
 const autumnJazzRadio = $('#autumnJazzRadio');
 const autumnJazzStreams = [
-  'https://ice2.somafm.com/illstreet-128-aac',
-  'https://ice5.somafm.com/illstreet-128-aac'
+  'https://jazzfm91.streamb.live/SB00023',
+  'https://jazzfm91.streamb.live/SB00009'
 ];
 let radioSourceIndex = 0;
 let radioIsOn = false;
 let radioIsStarting = false;
 const setRadioButton = (isPlaying, message) => {
   radioButton.textContent = isPlaying ? '❚❚' : '📻';
-  const label = message || (isPlaying ? 'Поставить осенний джаз на паузу' : 'Включить осенний джаз');
+  const label = message || (isPlaying ? 'Поставить осенний джаз на паузу' : 'Включить осенний джаз · Oscar Peterson');
   radioButton.title = label;
   radioButton.setAttribute('aria-label', label);
 };
