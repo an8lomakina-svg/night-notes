@@ -62,7 +62,16 @@ function renderPlans(){
       el.append(input,archive,del); box.append(el);
     });
     if(form&&field) form.onsubmit=e=>{e.preventDefault();const text=field.value.trim();if(!text)return;state.plans[key].push(text);field.value='';save();renderPlans()};
-    else col.querySelector('.plan-add')?.addEventListener('click',()=>{const text=prompt('Запиши коротко:');if(text?.trim()){state.plans[key].push(text.trim());save();renderPlans()}});
+    else {
+      const legacy=col.querySelector('.plan-add');
+      if(legacy){
+        const inlineForm=document.createElement('form');inlineForm.className='plan-compose';
+        const inlineField=document.createElement('input');inlineField.autocomplete='off';inlineField.placeholder=key==='dream'?'Добавить мысль…':key==='next'?'Добавить шаг…':'Отметить победу…';inlineField.setAttribute('aria-label',inlineField.placeholder);
+        const inlineButton=document.createElement('button');inlineButton.type='submit';inlineButton.className='add-button';inlineButton.setAttribute('aria-label','Добавить запись');inlineButton.textContent='+';
+        inlineForm.append(inlineField,inlineButton);legacy.replaceWith(inlineForm);
+        inlineForm.onsubmit=e=>{e.preventDefault();const text=inlineField.value.trim();if(!text)return;state.plans[key].push(text);inlineField.value='';save();renderPlans()};
+      }
+    }
   });
 }
 renderPlans();
