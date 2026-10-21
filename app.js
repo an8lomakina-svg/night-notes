@@ -3,6 +3,27 @@ const state = JSON.parse(localStorage.getItem('night-notes-v1') || 'null') || {
   focus: '', tasks: [{ id: 1, text: 'Прогуляться без наушников', done: false }, { id: 2, text: 'Разобрать одну важную вещь', done: false }],
   plans: { dream: ['Увидеть осенний Нью-Йорк'], next: ['Собрать блокнот под себя'], done: [] }, events: {}, imports: []
 };
+const BACKUP_FORMAT = 'night-notes-backup-v1';
+const downloadBackup = () => {
+  const payload = { format: BACKUP_FORMAT, exportedAt: new Date().toISOString(), state };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob), link = document.createElement('a');
+  link.href = url; link.download = `night-notes-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+};
+$('#exportData').onclick = downloadBackup;
+$('#importData').onclick = () => $('#dataFileInput').click();
+$('#dataFileInput').onchange = async event => {
+  const file = event.target.files[0]; if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const imported = parsed?.format === BACKUP_FORMAT ? parsed.state : parsed;
+    if (!imported || typeof imported !== 'object' || !imported.budget || !Array.isArray(imported.budget.transactions) || !imported.events || typeof imported.events !== 'object') throw new Error('invalid');
+    if (!confirm('Загрузить данные из файла? Текущие записи на этом устройстве будут заменены.')) return;
+    localStorage.setItem('night-notes-v1', JSON.stringify(imported)); location.reload();
+  } catch { alert('Не удалось прочитать файл блокнота. Выбери JSON, скачанный кнопкой ⇩.'); }
+  event.target.value = '';
+};
 state.focus ??= '';
 state.tasks ??= [];
 state.plans ??= { dream: [], next: [], done: [] };
