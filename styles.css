@@ -67,3 +67,4 @@ body.night .film-location span { color:#965e2f; }
 .shopping-create-form input:focus { border-color:#c87532; }
 .shopping-checklist { min-height:280px; }
 @media (max-width:760px) { .shopping-workspace { grid-template-columns:1fr; }.shopping-list-panel { align-self:stretch; }.shopping-lists { grid-auto-flow:column; grid-auto-columns:minmax(142px,78%); overflow-x:auto; padding-bottom:4px; }.shopping-list-choice { min-height:55px; }.shopping-checklist { min-height:0; } }
+.focus-buttons{display:flex;align-items:center;gap:13px}.event-title{flex:1}.event:hover .delete{opacity:1}.shopping-checklist-actions{display:flex;align-items:center;gap:8px}.delete-list{border:0;padding:3px 0;background:transparent;color:#9d8471;font:9px "DM Mono",monospace;letter-spacing:.04em;text-decoration:underline;text-underline-offset:3px}.delete-list:hover{color:#a85e2c}
