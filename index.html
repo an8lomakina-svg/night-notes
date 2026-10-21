@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=23" />
+    <link rel="stylesheet" href="styles.css?v=24" />
     <style>.budget-insights{margin:0 0 18px;padding:18px 22px 21px;border:1px solid rgba(91,61,38,.18);background:rgba(237,193,141,.20)}.budget-insights>p{margin:0 0 12px}.budget-insights-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.budget-insight{min-height:82px;padding:14px;background:rgba(255,252,247,.73);border-left:2px solid #c87532}.budget-insight small{display:block;color:var(--muted);font:9px "DM Mono",monospace;letter-spacing:.06em;text-transform:uppercase}.budget-insight strong{display:block;margin-top:8px;font:500 21px "Playfair Display",serif;letter-spacing:-.035em}.budget-insight span{display:block;margin-top:3px;color:#765a46;font-size:11px}@media(max-width:760px){.budget-insights{padding:16px}.budget-insights-grid{grid-template-columns:1fr}.budget-insight{min-height:auto}}</style>
     <style>@media(max-width:760px){.sidebar{display:block;position:sticky;padding:10px 14px}.sidebar:after{display:none}.wordmark{display:none}.sidebar nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));overflow:visible;gap:6px;margin:0;padding:0}.nav-link{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;padding:8px 7px;border:1px solid transparent;border-radius:10px;font-size:10px;white-space:normal}.nav-link span{font-size:8px;margin:0}.nav-link.active{border-color:rgba(199,122,61,.35);background:rgba(222,160,96,.16)}main{padding-top:0}}</style>
     <title>Night Notes</title>
@@ -116,13 +116,15 @@
       <form method="dialog" class="sync-dialog-card">
         <p class="eyebrow">ONE PRIVATE SOURCE</p>
         <h2>Синхронизация</h2>
-        <p id="syncMessage">Войди через почту — и один блокнот будет доступен на всех устройствах.</p>
+        <p id="syncMessage">Войди через Google — без писем и лимита отправки. Один блокнот будет доступен на всех устройствах.</p>
         <label class="sync-field">Email<input id="syncEmail" type="email" value="an8lomakina@gmail.com" autocomplete="email" required /></label>
-        <div class="sync-dialog-actions"><button id="sendSyncLink" type="button" class="outline-button">Отправить ссылку</button><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
+        <div class="sync-dialog-actions sync-dialog-actions-primary"><button id="googleSync" type="button" class="google-sync-button">Войти через Google</button></div>
+        <div class="sync-dialog-actions"><button id="sendSyncLink" type="button" class="outline-button">Войти по ссылке из почты</button><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
       </form>
     </dialog>
     <audio id="autumnJazzRadio" preload="none" playsinline></audio>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=40"></script>
+    <script src="app.js?v=41"></script>
   </body>
 </html>
+
