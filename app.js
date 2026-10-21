@@ -288,6 +288,7 @@ const syncMessage = $('#syncMessage');
 const syncEmail = $('#syncEmail');
 const syncSignOut = $('#syncSignOut');
 const sendSyncLink = $('#sendSyncLink');
+const googleSync = $('#googleSync');
 
 function normalizeCloudState() {
   state.focus ??= '';
@@ -403,11 +404,29 @@ $('#syncAccount').onclick = () => {
     syncMessage.textContent = `Синхронизировано для ${cloudUser.email || 'твоего аккаунта'}.`;
     syncSignOut.hidden = false;
   } else {
-    syncMessage.textContent = 'Войди через почту — ссылка придёт на email.';
+    syncMessage.textContent = 'Выбери вход через Google — это не использует почтовый лимит. Почта остаётся запасным вариантом.';
     syncSignOut.hidden = true;
   }
   syncDialog.showModal();
 };
+
+googleSync?.addEventListener('click', async () => {
+  if (!cloudClient) return;
+  googleSync.disabled = true;
+  syncMessage.textContent = 'Открываю безопасный вход Google…';
+  const redirect = new URL(window.location.href);
+  redirect.hash = '';
+  const { error } = await cloudClient.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: redirect.toString() }
+  });
+  if (error) {
+    googleSync.disabled = false;
+    syncMessage.textContent = /provider.*(not|disabled|enable)|unsupported/i.test(error.message)
+      ? 'Google-вход ещё не включён в настройках проекта. Пока используй ссылку из почты — она сохранит тот же общий блокнот.'
+      : `Не удалось открыть вход Google: ${error.message}`;
+  }
+});
 
 sendSyncLink?.addEventListener('click', async () => {
   const email = syncEmail.value.trim();
@@ -433,3 +452,4 @@ syncSignOut?.addEventListener('click', async () => {
 });
 
 initCloudSync();
+
