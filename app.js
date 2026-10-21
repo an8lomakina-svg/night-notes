@@ -132,4 +132,3 @@ autumnJazzRadio.addEventListener('error', () => {
   startAutumnJazz();
 });
 autumnJazzRadio.addEventListener('ended', () => { radioIsOn = false; setRadioButton(false); });
-};
