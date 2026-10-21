@@ -31,7 +31,14 @@ function renderArchive(){const entries=[...state.tasks.filter(t=>t.done).map(t=>
 const setHint=(x)=>{const h=$('#voiceHint');h.hidden=!x;h.textContent=x}; const SR=window.SpeechRecognition||window.webkitSpeechRecognition; $('#voiceTask').onclick=()=>{if(!SR){setHint('Голосовой ввод поддерживается в Chrome и Edge.');return}const r=new SR();r.lang='ru-RU';r.interimResults=false;$('#voiceTask').classList.add('listening');setHint('Слушаю… скажите задачу.');r.start();r.onresult=e=>{$('#taskInput').value=e.results[0][0].transcript;setHint('Готово — можно добавить.');};r.onerror=()=>setHint('Не удалось услышать запись. Попробуйте ещё раз.');r.onend=()=>$('#voiceTask').classList.remove('listening')};
 function speak(text){if(!('speechSynthesis'in window)||!text.trim())return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='ru-RU';u.rate=.93;window.speechSynthesis.speak(u)} $('#listenFocus').onclick=()=>speak(state.focus||'Пока фокус дня не записан.');$('#soundToggle').onclick=()=>speak(state.focus||'Добро пожаловать в Night Notes.');$('#themeToggle').onclick=()=>document.body.classList.toggle('night');
 $('#askChatGpt').onclick=()=>{const openTasks=state.tasks.filter(t=>!t.done).map(t=>`— ${t.text}`).join('\n')||'— пока нет';const context=`Помоги мне мягко распланировать день.\n\nМой фокус: ${state.focus||'ещё не записан'}\n\nОткрытые дела:\n${openTasks}\n\nПредложи реалистичный следующий шаг и бережный план без перегруза.`;window.open('https://chatgpt.com/','_blank','noopener');navigator.clipboard?.writeText(context).then(()=>{const label=$('.chatgpt-label');label.textContent='Контекст скопирован';setTimeout(()=>label.textContent='Спросить ChatGPT',1800)}).catch(()=>{});};
-renderCalendar(); if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+renderCalendar();
+// Remove old offline caches so every device receives the current interface.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(registrations => Promise.all(registrations.map(registration => registration.unregister()))).catch(() => {});
+}
+if ('caches' in window) {
+  caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('night-notes-')).map(key => caches.delete(key)))).catch(() => {});
+}
 
 state.shopping ??= [];
 state.budget ??= { transactions: [] };
