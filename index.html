@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=18" />
+    <link rel="stylesheet" href="styles.css?v=19" />
     <style>.budget-insights{margin:0 0 18px;padding:18px 22px 21px;border:1px solid rgba(91,61,38,.18);background:rgba(237,193,141,.20)}.budget-insights>p{margin:0 0 12px}.budget-insights-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.budget-insight{min-height:82px;padding:14px;background:rgba(255,252,247,.73);border-left:2px solid #c87532}.budget-insight small{display:block;color:var(--muted);font:9px "DM Mono",monospace;letter-spacing:.06em;text-transform:uppercase}.budget-insight strong{display:block;margin-top:8px;font:500 21px "Playfair Display",serif;letter-spacing:-.035em}.budget-insight span{display:block;margin-top:3px;color:#765a46;font-size:11px}@media(max-width:760px){.budget-insights{padding:16px}.budget-insights-grid{grid-template-columns:1fr}.budget-insight{min-height:auto}}</style>
     <style>@media(max-width:760px){.sidebar{display:block;position:sticky;padding:10px 14px}.sidebar:after{content:"⇢";position:absolute;right:7px;top:9px;z-index:2;display:grid;place-items:center;width:27px;height:30px;background:linear-gradient(90deg,rgba(255,251,243,0),rgba(255,251,243,.96) 35%);color:#a85e2c;font-size:18px;pointer-events:none}.wordmark{display:none}.sidebar nav{display:flex;overflow-x:auto;gap:6px;margin:0 -14px;padding:0 40px 4px 14px;scrollbar-width:auto;-webkit-overflow-scrolling:touch}.nav-link{display:flex;align-items:center;gap:6px;flex:none;padding:8px 10px;border:1px solid transparent;border-radius:999px;font-size:11px;white-space:nowrap}.nav-link span{font-size:9px;margin:0}.nav-link.active{border-color:rgba(199,122,61,.35);background:rgba(222,160,96,.16)}main{padding-top:0}}</style>
     <title>Night Notes</title>
@@ -96,8 +96,8 @@
           <div class="page-heading calendar-heading"><div><p class="eyebrow">YOUR RHYTHM</p><h1>Календарь<br /><em>без шума.</em></h1></div><button id="importCalendar" class="outline-button">↑ импорт .ics</button><input id="icsInput" type="file" accept=".ics,text/calendar" hidden /></div>
           <div class="calendar-layout">
             <section class="mini-calendar panel"><div class="calendar-nav"><button id="prevMonth">←</button><h2 id="monthTitle"></h2><button id="nextMonth">→</button></div><div class="weekdays"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div><div id="calendarGrid" class="calendar-grid"></div></section>
-            <section class="agenda"><p class="eyebrow" id="agendaLabel">ВЫБЕРИ ДЕНЬ</p><h2 id="agendaTitle">Сегодня</h2><div id="agendaItems" class="agenda-items"></div><form id="eventForm" class="event-form"><input id="eventInput" placeholder="Добавить своё событие" aria-label="Новое событие" /><button aria-label="Добавить событие">+</button></form>
-              <p class="calendar-privacy-note">Только события, добавленные в этот блокнот. Они хранятся локально на устройстве.</p>
+            <section class="agenda"><p class="eyebrow" id="agendaLabel">ВЫБЕРИ ДЕНЬ</p><h2 id="agendaTitle">Сегодня</h2><div id="agendaItems" class="agenda-items"></div><form id="eventForm" class="event-form"><input id="eventInput" placeholder="Добавить событие" aria-label="Новое событие" required /><input id="eventTime" type="time" aria-label="Время события" /><button aria-label="Добавить событие">+</button></form>
+              <section class="calendar-integration" aria-label="Интеграция с Google Calendar"><p class="eyebrow">GOOGLE CALENDAR</p><label for="googleCalendarClientId">OAuth Client ID</label><div class="calendar-connect-row"><input id="googleCalendarClientId" autocomplete="off" placeholder="…apps.googleusercontent.com" aria-label="Google OAuth Client ID" /><button id="connectGoogleCalendar" type="button" class="outline-button">Подключить</button></div><p id="calendarSyncState" class="calendar-privacy-note">Укажите OAuth Client ID, чтобы подключить Google Calendar. События останутся приватными и не будут показаны на публичной странице без входа.</p></section>
             </section>
           </div>
         </section>
@@ -113,6 +113,6 @@
     </div>
     <template id="taskTemplate"><article class="task"><button class="checkbox" aria-label="Отметить выполненной"></button><span class="task-text"></span><button class="delete" aria-label="Удалить задачу">×</button></article></template>
     <audio id="autumnJazzRadio" preload="none" playsinline></audio>
-    <script src="app.js?v=30"></script>
+    <script src="app.js?v=31"></script>
   </body>
 </html>
