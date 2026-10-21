@@ -327,6 +327,20 @@ function renderCloudState() {
   renderHealth('todo');
 }
 
+function hasNotebookEntries(source) {
+  const budget = source?.budget?.transactions?.length || 0;
+  const events = Object.values(source?.events || {}).reduce((count, day) => count + (Array.isArray(day) ? day.length : 0), 0);
+  const imports = source?.imports?.length || 0;
+  const shopping = (source?.shoppingLists || []).reduce((count, list) => count + (list?.items?.length || 0), 0);
+  const health = (source?.health?.done?.length || 0) + (source?.health?.todo?.length || 0);
+  const archive = source?.archive?.length || 0;
+  const customTasks = (source?.tasks || []).filter(task => !['Прогуляться без наушников', 'Разобрать одну важную вещь'].includes(task?.text) && !String(task?.text || '').startsWith('Забота о себе ·')).length;
+  const focus = String(source?.focus || '').trim().length;
+  const defaultPlans = ['Увидеть осенний Нью-Йорк', 'Собрать блокнот под себя'];
+  const plans = Object.values(source?.plans || {}).reduce((count, list) => count + (Array.isArray(list) ? list.filter(item => !defaultPlans.includes(item)).length : 0), 0);
+  return budget + events + imports + shopping + health + archive + customTasks + focus + plans > 0;
+}
+
 async function hydrateCloudState() {
   if (!cloudClient || !cloudUser) return;
   cloudHydrating = true;
@@ -338,9 +352,20 @@ async function hydrateCloudState() {
     if (syncMessage) syncMessage.textContent = 'Не удалось загрузить данные. Попробуй ещё раз.';
     return;
   }
-  if (data?.payload && typeof data.payload === 'object') {
+  const localSnapshot = JSON.parse(JSON.stringify(state));
+  const remotePayload = data?.payload && typeof data.payload === 'object' ? data.payload : null;
+  if (remotePayload && hasNotebookEntries(localSnapshot) && !hasNotebookEntries(remotePayload)) {
+    // Do not let a newly signed-in empty device erase the filled notebook.
     Object.keys(state).forEach(key => delete state[key]);
-    Object.assign(state, data.payload);
+    Object.assign(state, localSnapshot);
+    normalizeCloudState();
+    localStorage.setItem('night-notes-v1', JSON.stringify(state));
+    renderCloudState();
+    await pushCloudState();
+    if (syncMessage) syncMessage.textContent = 'Данные с этого устройства сохранены в общий блокнот.';
+  } else if (remotePayload) {
+    Object.keys(state).forEach(key => delete state[key]);
+    Object.assign(state, remotePayload);
     normalizeCloudState();
     localStorage.setItem('night-notes-v1', JSON.stringify(state));
     renderCloudState();
