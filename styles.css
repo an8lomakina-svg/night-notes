@@ -113,4 +113,5 @@ body.night .film-location span { color:#965e2f; }
 .google-sync-button { width:100%; padding:11px 14px; border:1px solid #b56a37; background:#fffdf8; color:#493125; font-size:13px; font-weight:600; box-shadow:0 4px 12px rgba(112,71,35,.08); }
 .google-sync-button:hover { background:#fff5e8; }
 .google-sync-button:disabled { opacity:.58; cursor:wait; }
+.sync-privacy-note { margin:10px 0 0; color:#8a7462; font:10px/1.45 "DM Mono",monospace; }
 
