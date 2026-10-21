@@ -11,9 +11,9 @@ const downloadBackup = () => {
   link.href = url; link.download = `night-notes-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
 };
-$('#exportData').onclick = downloadBackup;
-$('#importData').onclick = () => $('#dataFileInput').click();
-$('#dataFileInput').onchange = async event => {
+$('#exportData')?.addEventListener('click', downloadBackup);
+$('#importData')?.addEventListener('click', () => $('#dataFileInput')?.click());
+$('#dataFileInput')?.addEventListener('change', async event => {
   const file = event.target.files[0]; if (!file) return;
   try {
     const parsed = JSON.parse(await file.text());
@@ -23,7 +23,7 @@ $('#dataFileInput').onchange = async event => {
     localStorage.setItem('night-notes-v1', JSON.stringify(imported)); location.reload();
   } catch { alert('Не удалось прочитать файл блокнота. Выбери JSON, скачанный кнопкой ⇩.'); }
   event.target.value = '';
-};
+});
 state.focus ??= '';
 state.tasks ??= [];
 state.plans ??= { dream: [], next: [], done: [] };
