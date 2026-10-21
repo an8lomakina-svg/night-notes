@@ -12,11 +12,35 @@ state.plans.done ??= [];
 state.events ??= {};
 state.imports ??= [];
 state.archive ??= [];
+state.selfCareDaily ??= {};
 let selectedDate = new Date(); selectedDate.setHours(0,0,0,0); let month = new Date(selectedDate);
 const save = () => { localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); };
 const archiveRecord=(record)=>state.archive.unshift({id:`archive-${Date.now()}-${Math.random().toString(16).slice(2)}`,archivedAt:new Date().toISOString(),...record});
 const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const niceDate = (d) => new Intl.DateTimeFormat('ru-RU',{weekday:'long',day:'numeric',month:'long'}).format(d);
+const selfCareTips={
+  mind:[
+    '3 минуты без экрана: спокойно подыши и назови 3 вещи, которые видишь вокруг.',
+    'Запиши одну тревожную мысль и один маленький шаг, который сегодня в твоих силах.',
+    'Выйди на свет и пройдись 5–10 минут без телефона.',
+    'Проверь базу: вода, еда, сон — выбери одну вещь, которой сейчас не хватает.'
+  ],
+  body:[
+    'Проверь экран: верх монитора примерно на уровне глаз, плечи мягко опущены.',
+    'Сделай 5 спокойных кругов плечами и встань на 2 минуты — только без боли.',
+    'Отведи взгляд от экрана на 20 секунд и расслабь челюсть.',
+    'Поставь таймер на 45 минут: встань, пройдись и налей воды.'
+  ]
+};
+const addDailySelfCare=()=>{
+  const key=dateKey(new Date());
+  if(state.selfCareDaily[key]||state.tasks.some(task=>task.selfCareDate===key))return;
+  const pick=list=>list[Math.floor(Math.random()*list.length)];
+  const tips=[pick(selfCareTips.mind),pick(selfCareTips.body)];
+  tips.forEach((tip,index)=>state.tasks.push({id:`self-care-${key}-${index}-${Date.now()}`,text:`Забота о себе · ${tip}`,done:false,selfCareDate:key}));
+  state.selfCareDaily[key]=true;
+  save();
+};
 $('#dateLine').textContent = niceDate(new Date()).toUpperCase();
 $('#focusInput').value = state.focus;
 $('#focusInput').addEventListener('input', e => { state.focus = e.target.value; save(); $('#focusState').textContent = 'СОХРАНЕНО'; setTimeout(()=>$('#focusState').textContent='СОХРАНЯЕТСЯ АВТОМАТИЧЕСКИ', 1400); });
@@ -152,6 +176,8 @@ $('#budgetForm').addEventListener('submit',e=>{
 function renderHealth(kind){const box=$(kind==='done'?'#healthDone':'#healthTodo'), list=state.health[kind];box.innerHTML=list.length?'':'<p class="empty">Пока ничего. Можно начать с одного маленького пункта.</p>';list.forEach(item=>{const row=document.createElement('div');row.className='health-item';row.innerHTML='<span>✦</span><span></span><button class="archive-action" aria-label="Архивировать заметку">↙</button><button class="delete" aria-label="Удалить заметку">×</button>';row.querySelectorAll('span')[1].textContent=item.text;row.querySelector('.archive-action').onclick=()=>{archiveRecord({type:'ЗДОРОВЬЕ',text:item.text,source:'health',payload:{kind,item:{...item}}});removeItem(list,item.id);renderHealth(kind)};row.querySelector('.delete').onclick=()=>{removeItem(list,item.id);renderHealth(kind)};box.append(row)});}
 [['done','healthDoneForm','healthDoneInput'],['todo','healthTodoForm','healthTodoInput']].forEach(([kind,form,input])=>{$('#'+form).addEventListener('submit',e=>{e.preventDefault();const field=$('#'+input);if(!field.value.trim())return;state.health[kind].push({id:Date.now(),text:field.value.trim()});field.value='';save();renderHealth(kind)})});
 $('#askChatGpt').onclick=()=>{const shopping=state.shoppingLists.flatMap(list=>list.items.filter(item=>!item.done).map(item=>`— ${list.name}: ${item.text}`)).join('\n')||'— пока нет';const tasks=state.tasks.filter(t=>!t.done).map(t=>`— ${t.text}`).join('\n')||'— пока нет';const tx=state.budget.transactions;const income=tx.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0),expense=tx.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);const health=state.health.todo.map(x=>`— ${x.text}`).join('\n')||'— пока нет';const context=`Помоги мне мягко спланировать ближайшие дни.\n\nФокус дня: ${state.focus||'ещё не записан'}\n\nДела:\n${tasks}\n\nПокупки:\n${shopping}\n\nБюджет: доходы ${currency(income)}, расходы ${currency(expense)}.\n\nЗапланировать по здоровью:\n${health}\n\nПредложи реалистичный следующий шаг и бережный план без перегруза.`;window.open('https://chatgpt.com/','_blank','noopener');navigator.clipboard?.writeText(context).then(()=>{const label=$('.chatgpt-label');label.textContent='Контекст скопирован';setTimeout(()=>label.textContent='Спросить ChatGPT',1800)}).catch(()=>{});};
+addDailySelfCare();
+renderTasks();
 renderShopping();renderBudget();renderHealth('done');renderHealth('todo');
 $('#quickChatGpt').onclick=()=>$('#askChatGpt').click();
 
