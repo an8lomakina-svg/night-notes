@@ -34,8 +34,13 @@ state.events ??= {};
 state.imports ??= [];
 state.archive ??= [];
 state.selfCareDaily ??= {};
+const SYNC_CONFIG = { url: 'https://itlexbflfueafmgalpgk.supabase.co', key: 'sb_publishable_9_uhNczHfU3M7psgWMUptw_BLoK2RCq' };
+let cloudClient = null, cloudUser = null, cloudSyncTimer = null, cloudHydrating = false;
 let selectedDate = new Date(); selectedDate.setHours(0,0,0,0); let month = new Date(selectedDate);
-const save = () => { localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); };
+const save = () => { localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); queueCloudSave(); };
+function setSyncStatus(message, synced = false) { const button = $('#syncAccount'); if (!button) return; button.classList.toggle('is-synced', synced); button.title = message; button.setAttribute('aria-label', message); }
+function queueCloudSave() { if (!cloudClient || !cloudUser || cloudHydrating) return; clearTimeout(cloudSyncTimer); cloudSyncTimer = setTimeout(pushCloudState, 650); }
+async function pushCloudState() { if (!cloudClient || !cloudUser) return; const { error } = await cloudClient.from('notebook_state').upsert({ user_id: cloudUser.id, payload: state, updated_at: new Date().toISOString() }); if (error) setSyncStatus('Ошибка синхронизации'); else setSyncStatus(`Синхронизировано: ${cloudUser.email || 'твой аккаунт'}`, true); }
 const archiveRecord=(record)=>state.archive.unshift({id:`archive-${Date.now()}-${Math.random().toString(16).slice(2)}`,archivedAt:new Date().toISOString(),...record});
 const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const niceDate = (d) => new Intl.DateTimeFormat('ru-RU',{weekday:'long',day:'numeric',month:'long'}).format(d);
@@ -276,3 +281,126 @@ autumnJazzRadio.addEventListener('error', () => {
   startAutumnJazz();
 });
 autumnJazzRadio.addEventListener('ended', () => { radioIsOn = false; setRadioButton(false); });
+
+// One private source: the same notebook can be opened on desktop and phone.
+const syncDialog = $('#syncDialog');
+const syncMessage = $('#syncMessage');
+const syncEmail = $('#syncEmail');
+const syncSignOut = $('#syncSignOut');
+const sendSyncLink = $('#sendSyncLink');
+
+function normalizeCloudState() {
+  state.focus ??= '';
+  state.tasks ??= [];
+  state.plans ??= { dream: [], next: [], done: [] };
+  state.plans.dream ??= [];
+  state.plans.next ??= [];
+  state.plans.done ??= [];
+  state.events ??= {};
+  state.imports ??= [];
+  state.archive ??= [];
+  state.selfCareDaily ??= {};
+  state.shopping ??= [];
+  state.budget ??= { transactions: [] };
+  state.budget.transactions ??= [];
+  state.health ??= { done: [], todo: [] };
+  state.health.done ??= [];
+  state.health.todo ??= [];
+  if (!Array.isArray(state.shoppingLists)) {
+    state.shoppingLists = [{ id: 'main', name: 'Мой список', items: state.shopping }];
+    state.activeShoppingListId = 'main';
+  }
+  state.shoppingLists = state.shoppingLists.filter(list => list && Array.isArray(list.items));
+  if (!state.shoppingLists.length) state.shoppingLists.push({ id: 'main', name: 'Мой список', items: [] });
+  state.activeShoppingListId ??= state.shoppingLists[0].id;
+}
+
+function renderCloudState() {
+  normalizeCloudState();
+  renderTasks();
+  renderPlans();
+  renderCalendar();
+  renderArchive();
+  renderShopping();
+  renderBudget();
+  renderHealth('done');
+  renderHealth('todo');
+}
+
+async function hydrateCloudState() {
+  if (!cloudClient || !cloudUser) return;
+  cloudHydrating = true;
+  setSyncStatus('Загружаю синхронизированные данные…');
+  const { data, error } = await cloudClient.from('notebook_state').select('payload').eq('user_id', cloudUser.id).maybeSingle();
+  if (error) {
+    cloudHydrating = false;
+    setSyncStatus('Ошибка синхронизации');
+    if (syncMessage) syncMessage.textContent = 'Не удалось загрузить данные. Попробуй ещё раз.';
+    return;
+  }
+  if (data?.payload && typeof data.payload === 'object') {
+    Object.keys(state).forEach(key => delete state[key]);
+    Object.assign(state, data.payload);
+    normalizeCloudState();
+    localStorage.setItem('night-notes-v1', JSON.stringify(state));
+    renderCloudState();
+  } else {
+    // First signed-in device seeds the private row from its local notebook.
+    await pushCloudState();
+  }
+  cloudHydrating = false;
+  if (syncMessage) syncMessage.textContent = `Синхронизировано для ${cloudUser.email || 'твоего аккаунта'}.`;
+  setSyncStatus(`Синхронизировано: ${cloudUser.email || 'твой аккаунт'}`, true);
+}
+
+async function initCloudSync() {
+  if (!window.supabase?.createClient) {
+    setSyncStatus('Синхронизация недоступна');
+    return;
+  }
+  cloudClient = window.supabase.createClient(SYNC_CONFIG.url, SYNC_CONFIG.key);
+  const { data: { session } } = await cloudClient.auth.getSession();
+  cloudUser = session?.user || null;
+  if (syncSignOut) syncSignOut.hidden = !cloudUser;
+  if (cloudUser) await hydrateCloudState();
+  else setSyncStatus('Войти и синхронизировать');
+  cloudClient.auth.onAuthStateChange((_event, nextSession) => {
+    cloudUser = nextSession?.user || null;
+    if (syncSignOut) syncSignOut.hidden = !cloudUser;
+    if (cloudUser) setTimeout(() => hydrateCloudState(), 0);
+    else setSyncStatus('Войти и синхронизировать');
+  });
+}
+
+$('#syncAccount').onclick = () => {
+  if (!syncDialog) return;
+  if (cloudUser) {
+    syncMessage.textContent = `Синхронизировано для ${cloudUser.email || 'твоего аккаунта'}.`;
+    syncSignOut.hidden = false;
+  } else {
+    syncMessage.textContent = 'Войди через почту — ссылка придёт на email.';
+    syncSignOut.hidden = true;
+  }
+  syncDialog.showModal();
+};
+
+sendSyncLink?.addEventListener('click', async () => {
+  const email = syncEmail.value.trim();
+  if (!email || !cloudClient) return;
+  sendSyncLink.disabled = true;
+  syncMessage.textContent = 'Отправляю ссылку на почту…';
+  const redirect = new URL(window.location.href);
+  redirect.hash = '';
+  const { error } = await cloudClient.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect.toString() } });
+  sendSyncLink.disabled = false;
+  syncMessage.textContent = error
+    ? `Не удалось отправить ссылку: ${error.message}`
+    : 'Ссылка отправлена. Открой письмо и вернись в блокнот.';
+});
+
+syncSignOut?.addEventListener('click', async () => {
+  await cloudClient?.auth.signOut();
+  syncDialog?.close();
+});
+
+initCloudSync();
