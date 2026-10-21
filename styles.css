@@ -52,3 +52,18 @@ body.night .hero-title h1 { color:#2e2018; }
 body.night .hero-title .intro { color:#49362a; }
 body.night .film-location { color:#634936; }
 body.night .film-location span { color:#965e2f; }
+
+/* Shopping lists: a small notebook of checklists instead of one endless list. */
+.shopping-workspace { display:grid; grid-template-columns:minmax(220px,.52fr) minmax(0,1fr); gap:18px; }
+.shopping-list-panel { align-self:start; }
+.shopping-lists { display:grid; gap:7px; margin-top:18px; }
+.shopping-list-choice { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; padding:11px 12px; border:1px solid rgba(91,61,38,.16); background:rgba(255,252,247,.52); color:#604737; text-align:left; }
+.shopping-list-choice span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.shopping-list-choice small { flex:none; color:#8b7565; font:9px "DM Mono",monospace; }
+.shopping-list-choice:hover,.shopping-list-choice.active { border-color:#c87532; background:rgba(231,189,111,.18); color:#3f2b20; }
+.shopping-list-choice.active { box-shadow:inset 2px 0 0 #c87532; }
+.shopping-create-form { display:flex; gap:8px; margin-top:13px; }
+.shopping-create-form input { min-width:0; flex:1; padding:10px 9px; border:1px solid rgba(91,61,38,.2); background:#fffaf2; color:#493125; outline:0; font-size:12px; }
+.shopping-create-form input:focus { border-color:#c87532; }
+.shopping-checklist { min-height:280px; }
+@media (max-width:760px) { .shopping-workspace { grid-template-columns:1fr; }.shopping-list-panel { align-self:stretch; }.shopping-lists { grid-auto-flow:column; grid-auto-columns:minmax(142px,78%); overflow-x:auto; padding-bottom:4px; }.shopping-list-choice { min-height:55px; }.shopping-checklist { min-height:0; } }
