@@ -31,6 +31,25 @@ body { background:#f5eddf; color:var(--ink); }
 .agenda { border-color:rgba(91,61,38,.17); }.day { color:#4b3426; }.day:hover,.day.selected { background:#d98d52; color:#fffaf3; }.day.today { outline-color:#c87532; }.google-note { border-color:rgba(91,61,38,.22); background:rgba(255,252,247,.55); }.google-note p,.empty { color:#8b7565; }
 @media (max-width:760px) { .hero-title { background-position:61% center; }.sidebar { background:rgba(255,251,243,.92); } }
 
+/* Keep account, radio and ChatGPT controls reachable on phones. */
+@media (max-width:760px) {
+  .topbar {
+    position:sticky;
+    top:0;
+    z-index:6;
+    min-height:52px;
+    height:52px;
+    padding:0 2px;
+    background:rgba(255,251,243,.95);
+    backdrop-filter:blur(10px);
+  }
+  .topbar #dateLine { display:none; }
+  .topbar .top-actions { display:flex; margin-left:auto; gap:8px; }
+  .topbar .icon-button,
+  .topbar .profile { width:36px; height:36px; font-size:16px; }
+  .topbar .profile { font-size:15px; }
+}
+
 .chatgpt-button { display:flex; align-items:center; gap:8px; margin-top:23px; padding:9px 12px 9px 11px; border:1px solid rgba(112,75,44,.28); border-radius:999px; background:rgba(255,253,247,.7); color:#4a3225; box-shadow:0 3px 10px rgba(91,61,38,.08); transition:transform .18s,background .18s; }
 .chatgpt-button:hover { transform:translateY(-1px); background:#fffaf0; }.chatgpt-button>span:first-child { color:#a66636; font-size:15px; }.chatgpt-label { font-size:12px; font-weight:600; }.chatgpt-button small { padding-left:8px; border-left:1px solid rgba(112,75,44,.22); color:#867363; font:8px "DM Mono",monospace; letter-spacing:.04em; }
 @media (max-width:760px) { .chatgpt-button small { display:none; } }
@@ -90,13 +109,8 @@ body.night .film-location span { color:#965e2f; }
 .sync-button.is-synced,.profile.is-synced { border-color:#9aa881; color:#54784f; }
 .profile:focus-visible { outline:2px solid #c87532; outline-offset:3px; }
 @media (max-width:760px) { .sync-dialog-card { padding:20px; }.sync-dialog-actions { flex-wrap:wrap; }.sync-dialog-actions .outline-button { width:100%; margin-right:0; } }
+.sync-dialog-actions-primary { margin-top:4px; }
+.google-sync-button { width:100%; padding:11px 14px; border:1px solid #b56a37; background:#fffdf8; color:#493125; font-size:13px; font-weight:600; box-shadow:0 4px 12px rgba(112,71,35,.08); }
+.google-sync-button:hover { background:#fff5e8; }
+.google-sync-button:disabled { opacity:.58; cursor:wait; }
 
-
-/* Keep account, radio and ChatGPT controls reachable on phones. */
-@media (max-width:760px) {
-  .topbar { position:sticky; top:0; z-index:6; min-height:52px; height:52px; padding:0 2px; background:rgba(255,251,243,.95); backdrop-filter:blur(10px); }
-  .topbar #dateLine { display:none; }
-  .topbar .top-actions { display:flex; margin-left:auto; gap:8px; }
-  .topbar .icon-button, .topbar .profile { width:36px; height:36px; font-size:16px; }
-  .topbar .profile { font-size:15px; }
-}
