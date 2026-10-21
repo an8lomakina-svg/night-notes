@@ -100,7 +100,9 @@ const startAutumnJazz = async () => {
     const sourceIndex = (radioSourceIndex + attempt) % autumnJazzStreams.length;
     autumnJazzRadio.src = autumnJazzStreams[sourceIndex];
     try {
+      autumnJazzRadio.muted = true;
       await autumnJazzRadio.play();
+      autumnJazzRadio.muted = false;
       radioSourceIndex = sourceIndex;
       radioIsOn = true;
       radioIsStarting = false;
