@@ -87,5 +87,6 @@ body.night .film-location span { color:#965e2f; }
 .sync-field input { padding:11px 10px; border:1px solid rgba(91,61,38,.22); background:#fffdf8; color:#493125; font:14px "Space Grotesk",sans-serif; letter-spacing:0; }
 .sync-dialog-actions { display:flex; align-items:center; gap:14px; margin-top:19px; }
 .sync-dialog-actions .outline-button { margin-right:auto; }
-.sync-button.is-synced { border-color:#9aa881; color:#54784f; }
+.sync-button.is-synced,.profile.is-synced { border-color:#9aa881; color:#54784f; }
+.profile:focus-visible { outline:2px solid #c87532; outline-offset:3px; }
 @media (max-width:760px) { .sync-dialog-card { padding:20px; }.sync-dialog-actions { flex-wrap:wrap; }.sync-dialog-actions .outline-button { width:100%; margin-right:0; } }
