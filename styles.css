@@ -167,6 +167,15 @@ body.night .film-location span { color:#965e2f; }
   #budget .budget-ledger-tools { grid-template-columns:1fr; }
 }
 
+/* Make the accounting rule visible before the user starts entering data. */
+#budget .budget-accounting-note {
+  max-width:720px;
+  margin:-9px 0 22px;
+  color:#806b59;
+  font-size:11px;
+  line-height:1.5;
+}
+
 /* Budget refresh: a lighter ledger page with a clear reading order. */
 #budget .page-heading { padding-bottom:34px; }
 #budget .page-heading h1 { max-width:480px; }
