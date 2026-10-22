@@ -496,37 +496,18 @@ async function initCloudSync() {
   });
 }
 
-const syncOtp = $('#syncOtp');
 const requestSyncCode = $('#requestSyncCode');
-const verifySyncCode = $('#verifySyncCode');
-let pendingSyncEmail = '';
 requestSyncCode?.addEventListener('click', async () => {
   const email = syncEmail?.value.trim().toLowerCase();
   if (!email || !cloudClient) return;
   requestSyncCode.disabled = true;
-  const { error } = await cloudClient.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  const { error } = await cloudClient.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}${window.location.pathname}` } });
   requestSyncCode.disabled = false;
   if (error) {
-    syncMessage.textContent = `Не удалось отправить код: ${error.message}`;
+    syncMessage.textContent = `Не удалось отправить ссылку: ${error.message}`;
     return;
   }
-  pendingSyncEmail = email;
-  syncOtp.hidden = false;
-  verifySyncCode.hidden = false;
-  syncMessage.textContent = 'Код отправлен. Введи его из письма — можно прямо в установленном приложении.';
-  syncOtp.focus();
-});
-verifySyncCode?.addEventListener('click', async () => {
-  const token = syncOtp?.value.trim();
-  if (!pendingSyncEmail || !token || !cloudClient) return;
-  verifySyncCode.disabled = true;
-  const { error } = await cloudClient.auth.verifyOtp({ email: pendingSyncEmail, token, type: 'email' });
-  verifySyncCode.disabled = false;
-  if (error) {
-    syncMessage.textContent = `Код не подошёл: ${error.message}`;
-    return;
-  }
-  syncMessage.textContent = 'Вход выполнен. Загружаю твой бюджет…';
+  syncMessage.textContent = 'Ссылка отправлена. Открой письмо на этом телефоне и нажми «Войти». Затем вернись в Night Notes.';
 });
 
 $('#syncAccount').onclick = () => {
