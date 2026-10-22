@@ -114,4 +114,10 @@ body.night .film-location span { color:#965e2f; }
 .google-sync-button:hover { background:#fff5e8; }
 .google-sync-button:disabled { opacity:.58; cursor:wait; }
 .sync-privacy-note { margin:10px 0 0; color:#8a7462; font:10px/1.45 "DM Mono",monospace; }
-
+.sync-email-login{display:grid;grid-template-columns:1fr auto;gap:8px;margin:18px 0 8px}
+.sync-email-login input{min-width:0;border:1px solid rgba(91,61,38,.24);border-radius:8px;background:rgba(255,252,247,.72);padding:11px 12px;color:var(--ink);font:14px "Space Grotesk",sans-serif}
+.sync-email-login input:focus{outline:2px solid rgba(35,126,117,.55);outline-offset:1px}
+.sync-email-login #syncOtp{grid-column:1/-1}
+.sync-email-login #verifySyncCode{grid-column:1/-1;justify-self:start}
+.sync-email-note{color:var(--muted);font-size:11px;line-height:1.45;margin:0 0 12px}
+@media(max-width:520px){.sync-email-login{grid-template-columns:1fr}.sync-email-login .outline-button{justify-self:stretch}}
