@@ -610,4 +610,6 @@ function mountBudgetJourney() {
   $('#budgetLedgerSearch').addEventListener('input', applyLedgerView);
   applyLedgerView();
 }
+const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=28')) budgetStylesheet.href = 'styles.css?v=28&journey=1';
 mountBudgetJourney();
