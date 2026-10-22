@@ -491,7 +491,6 @@ async function initCloudSync() {
   });
 }
 
-const syncEmail = $('#syncEmail');
 const syncOtp = $('#syncOtp');
 const requestSyncCode = $('#requestSyncCode');
 const verifySyncCode = $('#verifySyncCode');
