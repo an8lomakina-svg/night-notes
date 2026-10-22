@@ -455,8 +455,13 @@ async function hydrateCloudState() {
     localStorage.setItem('night-notes-v1', JSON.stringify(state));
     renderCloudState();
   } else {
-    // First signed-in device seeds the private row from its local notebook.
-    await pushCloudState();
+    // The first signed-in device may be a freshly installed phone. Never let
+    // that empty local store overwrite the filled notebook on the desktop.
+    if (hasNotebookEntries(localSnapshot)) {
+      await pushCloudState();
+    } else if (syncMessage) {
+      syncMessage.textContent = 'Аккаунт подключён, но записей пока нет. Сначала войди на устройстве, где открыт заполненный блокнот.';
+    }
   }
   cloudHydrating = false;
   if (syncMessage) syncMessage.textContent = `Синхронизировано для ${cloudUser.email || 'твоего аккаунта'}.`;
