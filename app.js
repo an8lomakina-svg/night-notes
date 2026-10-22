@@ -542,3 +542,71 @@ syncSignOut?.addEventListener('click', async () => {
 });
 
 initCloudSync();
+
+// Budget journey: start with an intent, then keep the long journal easy to scan.
+function mountBudgetJourney() {
+  const section = $('#budget');
+  const summary = section?.querySelector('.budget-summary');
+  const form = $('#budgetForm');
+  const list = $('#transactionList');
+  if (!section || !summary || !form || !list || section.dataset.journeyMounted) return;
+  section.dataset.journeyMounted = 'true';
+
+  const quick = document.createElement('div');
+  quick.className = 'budget-quick-actions';
+  quick.setAttribute('aria-label', 'Быстрые действия бюджета');
+  quick.innerHTML = '<button type="button" class="budget-quick-action is-active" data-budget-action="expense"><span>−</span><strong>Расход</strong><small>покупка или услуга</small></button><button type="button" class="budget-quick-action" data-budget-action="income"><span>＋</span><strong>Доход</strong><small>зарплата или возврат</small></button><button type="button" class="budget-quick-action" data-budget-action="transfer"><span>↔</span><strong>Перевод</strong><small>между своими счетами</small></button>';
+  summary.before(quick);
+
+  const formHint = document.createElement('p');
+  formHint.className = 'budget-flow-hint';
+  formHint.textContent = 'Начни с названия и суммы — дополнительные детали можно уточнить ниже.';
+  form.before(formHint);
+  const addButton = form.querySelector('[aria-label="Добавить операцию"]');
+  if (addButton) addButton.textContent = 'Добавить';
+
+  const ledgerHead = document.createElement('div');
+  ledgerHead.className = 'budget-ledger-head';
+  ledgerHead.innerHTML = '<div><p class="eyebrow">ИСТОРИЯ</p><h3>Операции</h3></div><span id="budgetTransactionCount" class="progress"></span>';
+  list.before(ledgerHead);
+  const tools = document.createElement('div');
+  tools.className = 'budget-ledger-tools';
+  tools.innerHTML = '<select id="budgetLedgerFilter" aria-label="Показать операции"><option value="all">Все операции</option><option value="expense">Только расходы</option><option value="income">Только доходы</option><option value="transfer">Только переводы</option></select><input id="budgetLedgerSearch" type="search" placeholder="Найти в журнале…" aria-label="Поиск по операциям" />';
+  list.before(tools);
+
+  const typeSelect = $('#transactionType');
+  const nameInput = $('#transactionName');
+  quick.querySelectorAll('[data-budget-action]').forEach(button => {
+    button.addEventListener('click', () => {
+      const type = button.dataset.budgetAction;
+      typeSelect.value = type;
+      typeSelect.dispatchEvent(new Event('change'));
+      quick.querySelectorAll('.budget-quick-action').forEach(item => item.classList.toggle('is-active', item === button));
+      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      nameInput?.focus({ preventScroll: true });
+    });
+  });
+
+  const applyLedgerView = () => {
+    const mode = $('#budgetLedgerFilter')?.value || 'all';
+    const needle = ($('#budgetLedgerSearch')?.value || '').trim().toLocaleLowerCase('ru');
+    const entries = [...state.budget.transactions].reverse();
+    let shown = 0;
+    list.querySelectorAll('.transaction').forEach((row, index) => {
+      const item = entries[index];
+      if (!item) return;
+      const haystack = `${item.name} ${item.category} ${item.date} ${item.comment || ''}`.toLocaleLowerCase('ru');
+      const visible = (mode === 'all' || item.type === mode) && (!needle || haystack.includes(needle));
+      row.hidden = !visible;
+      if (visible) shown += 1;
+    });
+    const count = $('#budgetTransactionCount');
+    if (count) count.textContent = needle || mode !== 'all' ? `${shown} найдено` : `${shown} записей`;
+  };
+  const baseBudgetRender = renderBudget;
+  renderBudget = () => { baseBudgetRender(); applyLedgerView(); };
+  $('#budgetLedgerFilter').addEventListener('change', applyLedgerView);
+  $('#budgetLedgerSearch').addEventListener('input', applyLedgerView);
+  applyLedgerView();
+}
+mountBudgetJourney();
