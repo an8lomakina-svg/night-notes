@@ -230,6 +230,8 @@ if (!state.shoppingLists.length) state.shoppingLists.push({ id: 'main', name: '�
 state.activeShoppingListId ??= state.shoppingLists[0].id;
 const categoryFor = (name, current) => {
   const label = String(name || '');
+  if (label.match(/зарплата|salary|myameria/i)) return 'Зарплата';
+  if (label.match(/займ|одолж/i)) return 'Займ';
   if (/ALTA GROUP\*BALANS|ИВАН ХРИСТОВ|IVAN HRISTOV/i.test(label)) return /ALTA GROUP\*BALANS/i.test(label) ? 'Массаж и уход' : 'Стоматолог';
   if (/FLYDUBAI/i.test(label)) return 'Авиабилеты';
   if (/YANDEX|Yandex Go|PS_YANDEX/i.test(label) || current === 'Транспорт') return 'Такси';
@@ -242,9 +244,15 @@ const categoryFor = (name, current) => {
   if (/Аренда квартиры/i.test(label) || current === 'Дом') return 'Дом и аренда';
   return current === 'Другое' ? 'Прочее' : current;
 };
-if (state.budget.categorySchema !== '2026-10-v2') {
+function migrateBudgetCategories() {
+  if (state.budget.categorySchema === '2026-10-v3') return;
   state.budget.transactions.forEach(entry => entry.category = categoryFor(entry.name, entry.category));
-  state.budget.categorySchema = '2026-10-v2';
+  state.budget.categorySchema = '2026-10-v3';
+  localStorage.setItem('night-notes-v1', JSON.stringify(state));
+}
+if (state.budget.categorySchema !== '2026-10-v3') {
+  state.budget.transactions.forEach(entry => entry.category = categoryFor(entry.name, entry.category));
+  state.budget.categorySchema = '2026-10-v3';
   localStorage.setItem('night-notes-v1', JSON.stringify(state));
 }
 const currency = (n, code='RSD') => new Intl.NumberFormat('ru-RU',{style:'currency',currency:code,maximumFractionDigits:code==='EUR'?2:0}).format(n||0);
@@ -270,7 +278,7 @@ function renderBudget(){ const tx=state.budget.transactions;const code=x=>x.curr
 $('#transactionDate').value=new Date().toISOString().slice(0,10);
 $('#budgetCurrencyFilter').onchange=renderBudget;
 const expenseCategories=['Доставка еды','Рестораны и кофе','Продукты','Такси','Авиабилеты','Дом и аренда','Стоматолог','Аптека и здоровье','Массаж и уход','Связь и подписки','Мобильный кэш · Катя','Красота','Досуг','Прочее'];
-const incomeCategories=['Зарплата','Перевод от себя','Возврат','Подарок','Другое'];
+const incomeCategories=['Зарплата','Займ','Перевод от себя','Возврат','Подарок','Другое'];
 const transactionType=$('#transactionType'), transactionCategory=$('#transactionCategory'), transferFrom=$('#transferFrom'), transferTo=$('#transferTo');
 function refreshTransactionForm(){
   const type=transactionType.value;
@@ -398,6 +406,7 @@ function normalizeCloudState() {
   state.shoppingLists = state.shoppingLists.filter(list => list && Array.isArray(list.items));
   if (!state.shoppingLists.length) state.shoppingLists.push({ id: 'main', name: 'Мой список', items: [] });
   state.activeShoppingListId ??= state.shoppingLists[0].id;
+  migrateBudgetCategories();
 }
 
 function renderCloudState() {
@@ -613,5 +622,5 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=29')) budgetStylesheet.href = 'styles.css?v=29&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=30')) budgetStylesheet.href = 'styles.css?v=30&journey=1';
 mountBudgetJourney();
