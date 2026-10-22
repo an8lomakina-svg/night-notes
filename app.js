@@ -469,20 +469,61 @@ async function initCloudSync() {
     return;
   }
   cloudClient = window.supabase.createClient(SYNC_CONFIG.url, SYNC_CONFIG.key);
-  await ensureSharedSync();
-  await hydrateSharedState();
   const { data: { session } } = await cloudClient.auth.getSession();
   cloudUser = session?.user || null;
   if (syncSignOut) syncSignOut.hidden = !cloudUser;
-  if (cloudUser) await hydrateCloudState();
-  else setSyncStatus(sharedSync ? 'Приватная ссылка синхронизирована' : 'Создать приватную ссылку', Boolean(sharedSync));
+  if (cloudUser) {
+    await hydrateCloudState();
+  } else if (new URLSearchParams(window.location.search).has('sync') || window.location.hash.includes('sync=')) {
+    // Keep old private-link notebooks working, but do not create a new
+    // anonymous notebook for a fresh home-screen installation.
+    await ensureSharedSync();
+    await hydrateSharedState();
+  } else {
+    setSyncStatus('Войти по email');
+  }
   cloudClient.auth.onAuthStateChange((_event, nextSession) => {
     cloudUser = nextSession?.user || null;
     if (syncSignOut) syncSignOut.hidden = !cloudUser;
     if (cloudUser) setTimeout(() => hydrateCloudState(), 0);
-    else setSyncStatus(sharedSync ? 'Приватная ссылка синхронизирована' : 'Создать приватную ссылку', Boolean(sharedSync));
+    else if (sharedSync) setSyncStatus('Приватная ссылка синхронизирована', true);
+    else setSyncStatus('Войти по email');
   });
 }
+
+const syncEmail = $('#syncEmail');
+const syncOtp = $('#syncOtp');
+const requestSyncCode = $('#requestSyncCode');
+const verifySyncCode = $('#verifySyncCode');
+let pendingSyncEmail = '';
+requestSyncCode?.addEventListener('click', async () => {
+  const email = syncEmail?.value.trim().toLowerCase();
+  if (!email || !cloudClient) return;
+  requestSyncCode.disabled = true;
+  const { error } = await cloudClient.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  requestSyncCode.disabled = false;
+  if (error) {
+    syncMessage.textContent = `Не удалось отправить код: ${error.message}`;
+    return;
+  }
+  pendingSyncEmail = email;
+  syncOtp.hidden = false;
+  verifySyncCode.hidden = false;
+  syncMessage.textContent = 'Код отправлен. Введи его из письма — можно прямо в установленном приложении.';
+  syncOtp.focus();
+});
+verifySyncCode?.addEventListener('click', async () => {
+  const token = syncOtp?.value.trim();
+  if (!pendingSyncEmail || !token || !cloudClient) return;
+  verifySyncCode.disabled = true;
+  const { error } = await cloudClient.auth.verifyOtp({ email: pendingSyncEmail, token, type: 'email' });
+  verifySyncCode.disabled = false;
+  if (error) {
+    syncMessage.textContent = `Код не подошёл: ${error.message}`;
+    return;
+  }
+  syncMessage.textContent = 'Вход выполнен. Загружаю твой бюджет…';
+});
 
 $('#syncAccount').onclick = () => {
   if (!syncDialog) return;
@@ -490,7 +531,7 @@ $('#syncAccount').onclick = () => {
     syncMessage.textContent = `Синхронизировано для ${cloudUser.email || 'твоего аккаунта'}.`;
     syncSignOut.hidden = false;
   } else {
-    syncMessage.textContent = sharedSync ? 'Приватный блокнот подключён. Создай ссылку, чтобы открыть его на телефоне.' : 'Создай приватную ссылку для телефона.';
+    syncMessage.textContent = sharedSync ? 'Приватный блокнот подключён. Для телефона лучше войти по email.' : 'Войди по email — это новый способ синхронизации без секретной ссылки.';
     syncSignOut.hidden = true;
   }
   syncDialog.showModal();
