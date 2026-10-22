@@ -541,6 +541,7 @@ syncSignOut?.addEventListener('click', async () => {
   syncDialog?.close();
 });
 
+setTimeout(mountBudgetJourney, 0);
 initCloudSync();
 
 // Budget journey: start with an intent, then keep the long journal easy to scan.
