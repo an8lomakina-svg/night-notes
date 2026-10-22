@@ -67,6 +67,11 @@ async function decryptSharedState(secret, payload) {
   return JSON.parse(new TextDecoder().decode(decrypted));
 }
 function sharedSecretFromLocation() {
+  // Home-screen web apps on iOS can drop the URL fragment when they are
+  // created from Safari. Keep the secret in the query string as the primary
+  // transport, while retaining hash links for backwards compatibility.
+  const querySecret = new URLSearchParams(window.location.search).get('sync');
+  if (querySecret) return querySecret;
   const match = window.location.hash.match(/(?:^#|&)sync=([^&]+)/);
   return match ? decodeURIComponent(match[1]) : localStorage.getItem(SHARED_SECRET_KEY);
 }
@@ -496,9 +501,13 @@ $('#createShareLink')?.addEventListener('click', async () => {
   if (!sync) return;
   await pushSharedState();
   const link = new URL(window.location.href);
-  link.hash = `sync=${encodeURIComponent(sync.secret)}`;
+  // Put the key in the query string as well as the hash. The query survives
+  // more reliably when a user adds the page to the iOS Home Screen.
+  link.searchParams.set('sync', sync.secret);
+  const currentView = window.location.hash && !window.location.hash.includes('sync=') ? window.location.hash : '#today';
+  link.hash = currentView;
   try { await navigator.clipboard.writeText(link.toString()); } catch {}
-  syncMessage.textContent = 'Приватная ссылка скопирована. Открой её на телефоне — блокнот загрузится автоматически.';
+  syncMessage.textContent = 'Приватная ссылка скопирована. Открой её на телефоне, дождись бюджета и только потом добавляй на экран Домой.';
 });
 
 syncSignOut?.addEventListener('click', async () => {
@@ -507,4 +516,3 @@ syncSignOut?.addEventListener('click', async () => {
 });
 
 initCloudSync();
-
