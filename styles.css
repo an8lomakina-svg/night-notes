@@ -122,6 +122,50 @@ body.night .film-location span { color:#965e2f; }
 .sync-email-note{color:var(--muted);font-size:11px;line-height:1.45;margin:0 0 12px}
 @media(max-width:520px){.sync-email-login{grid-template-columns:1fr}.sync-email-login .outline-button{justify-self:stretch}}
 
+/* Budget journey: choose an intent first, then find any operation quickly. */
+#budget .budget-quick-actions {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:9px;
+  margin:-10px 0 22px;
+}
+#budget .budget-quick-action {
+  display:grid;
+  grid-template-columns:28px 1fr;
+  grid-template-rows:auto auto;
+  align-items:center;
+  column-gap:9px;
+  padding:12px 13px;
+  border:1px solid rgba(91,61,38,.14);
+  border-radius:2px;
+  background:rgba(255,252,247,.52);
+  color:#684c39;
+  text-align:left;
+  transition:background .18s,border-color .18s,transform .18s;
+}
+#budget .budget-quick-action:hover { transform:translateY(-1px); border-color:rgba(200,117,50,.55); background:#fffaf2; }
+#budget .budget-quick-action.is-active { border-color:#c87532; background:rgba(231,189,111,.2); box-shadow:inset 3px 0 #c87532; }
+#budget .budget-quick-action>span { grid-row:1 / span 2; display:grid; place-items:center; width:26px; height:26px; border-radius:50%; background:#f1dfc7; color:#a85e2c; font:18px/1 "DM Mono",monospace; }
+#budget .budget-quick-action strong { font-size:12px; font-weight:600; }
+#budget .budget-quick-action small { margin-top:2px; color:#8a7462; font-size:10px; }
+#budget .budget-flow-hint { margin:4px 0 0; color:#8b7565; font-size:11px; line-height:1.4; }
+#budget .budget-entry-card .budget-form { margin-top:10px; }
+#budget .budget-entry-card .budget-form .add-button { width:auto; min-width:92px; padding:0 14px; border-radius:2px; font:600 11px "Space Grotesk",sans-serif; letter-spacing:.02em; }
+#budget .budget-ledger-head { display:flex; align-items:end; justify-content:space-between; gap:10px; margin-top:27px; }
+#budget .budget-ledger-head h3 { margin:0; color:#493125; font:500 21px "Playfair Display",serif; }
+#budget .budget-ledger-tools { display:grid; grid-template-columns:1fr 1.2fr; gap:8px; margin-top:10px; }
+#budget .budget-ledger-tools select,
+#budget .budget-ledger-tools input { min-width:0; padding:9px 10px; border:1px solid rgba(91,61,38,.16); border-radius:1px; background:#fffdf8; color:#493125; outline:0; font-size:11px; }
+#budget .budget-ledger-tools input:focus,
+#budget .budget-ledger-tools select:focus { border-color:#c87532; }
+#budget .transaction[hidden] { display:none; }
+@media (max-width:760px) {
+  #budget .budget-quick-actions { grid-template-columns:1fr; gap:7px; margin:-5px 0 18px; }
+  #budget .budget-quick-action { grid-template-columns:27px 1fr; padding:10px 12px; }
+  #budget .budget-quick-action small { display:block; }
+  #budget .budget-ledger-tools { grid-template-columns:1fr; }
+}
+
 /* Budget refresh: a lighter ledger page with a clear reading order. */
 #budget .page-heading { padding-bottom:34px; }
 #budget .page-heading h1 { max-width:480px; }
