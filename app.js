@@ -557,7 +557,9 @@ function mountBudgetJourney() {
   quick.className = 'budget-quick-actions';
   quick.setAttribute('aria-label', 'Быстрые действия бюджета');
   quick.innerHTML = '<button type="button" class="budget-quick-action is-active" data-budget-action="expense"><span>−</span><strong>Расход</strong><small>покупка или услуга</small></button><button type="button" class="budget-quick-action" data-budget-action="income"><span>＋</span><strong>Доход</strong><small>зарплата или возврат</small></button><button type="button" class="budget-quick-action" data-budget-action="transfer"><span>↔</span><strong>Перевод</strong><small>между своими счетами</small></button>';
-  summary.before(quick);
+  form.before(quick);
+  const entryHeading = section.querySelector('.budget-entry-heading h2');
+  if (entryHeading) entryHeading.textContent = 'Добавить запись';
 
   const formHint = document.createElement('p');
   formHint.className = 'budget-flow-hint';
@@ -611,5 +613,5 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=28')) budgetStylesheet.href = 'styles.css?v=28&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=29')) budgetStylesheet.href = 'styles.css?v=29&journey=1';
 mountBudgetJourney();
