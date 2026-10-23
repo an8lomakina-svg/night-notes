@@ -553,6 +553,7 @@ autumnJazzRadio.addEventListener('ended', () => { radioIsOn = false; setRadioBut
 const syncDialog = $('#syncDialog');
 const syncMessage = $('#syncMessage');
 const syncEmail = $('#syncEmail');
+const shareLink = $('#shareLink');
 const syncSignOut = $('#syncSignOut');
 const sendSyncLink = $('#sendSyncLink');
 const googleSync = $('#googleSync');
@@ -743,8 +744,13 @@ $('#createShareLink')?.addEventListener('click', async () => {
     link.searchParams.set('sync', sync.secret);
     const currentView = window.location.hash && !window.location.hash.includes('sync=') ? window.location.hash : '#today';
     link.hash = currentView;
-    try { await navigator.clipboard.writeText(link.toString()); } catch {}
-    syncMessage.textContent = 'Приватная ссылка скопирована. Открой именно её в каждом браузере — изменения будут появляться при возвращении к вкладке.';
+    shareLink.value = link.toString();
+    shareLink.hidden = false;
+    let copied = true;
+    try { await navigator.clipboard.writeText(link.toString()); } catch { copied = false; }
+    syncMessage.textContent = copied
+      ? 'Приватная ссылка скопирована. Открой именно её в каждом браузере — изменения будут появляться при возвращении к вкладке.'
+      : 'Скопируй ссылку ниже и открой именно её в каждом браузере — изменения будут появляться при возвращении к вкладке.';
   } catch {
     syncMessage.textContent = 'Не удалось создать приватную ссылку. Проверь подключение и попробуй ещё раз.';
   } finally {
