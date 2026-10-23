@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=31" />
+    <link rel="stylesheet" href="styles.css?v=32" />
     <style>.budget-insights{margin:0 0 18px;padding:18px 22px 21px;border:1px solid rgba(91,61,38,.18);background:rgba(237,193,141,.20)}.budget-insights>p{margin:0 0 12px}.budget-insights-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.budget-insight{min-height:82px;padding:14px;background:rgba(255,252,247,.73);border-left:2px solid #c87532}.budget-insight small{display:block;color:var(--muted);font:9px "DM Mono",monospace;letter-spacing:.06em;text-transform:uppercase}.budget-insight strong{display:block;margin-top:8px;font:500 21px "Playfair Display",serif;letter-spacing:-.035em}.budget-insight span{display:block;margin-top:3px;color:#765a46;font-size:11px}@media(max-width:760px){.budget-insights{padding:16px}.budget-insights-grid{grid-template-columns:1fr}.budget-insight{min-height:auto}}</style>
     <style>@media(max-width:760px){.sidebar{display:block;position:sticky;padding:10px 14px}.sidebar:after{display:none}.wordmark{display:none}.sidebar nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));overflow:visible;gap:6px;margin:0;padding:0}.nav-link{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;padding:8px 7px;border:1px solid transparent;border-radius:10px;font-size:10px;white-space:normal}.nav-link span{font-size:8px;margin:0}.nav-link.active{border-color:rgba(199,122,61,.35);background:rgba(222,160,96,.16)}main{padding-top:0}}</style>
     <title>Night Notes</title>
@@ -96,8 +96,8 @@
           <div class="page-heading calendar-heading"><div><p class="eyebrow">YOUR RHYTHM</p><h1>Календарь<br /><em>без шума.</em></h1></div><button id="importCalendar" class="outline-button">↑ импорт .ics</button><input id="icsInput" type="file" accept=".ics,text/calendar" hidden /></div>
           <div class="calendar-layout">
             <section class="mini-calendar panel"><div class="calendar-nav"><button id="prevMonth">←</button><h2 id="monthTitle"></h2><button id="nextMonth">→</button></div><div class="weekdays"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div><div id="calendarGrid" class="calendar-grid"></div></section>
-            <section class="agenda"><p class="eyebrow" id="agendaLabel">ВЫБЕРИ ДЕНЬ</p><h2 id="agendaTitle">Сегодня</h2><div id="agendaItems" class="agenda-items"></div><form id="eventForm" class="event-form"><input id="eventInput" placeholder="Добавить своё событие" aria-label="Новое событие" /><button type="submit" aria-label="Добавить событие">+</button></form>
-              <p class="calendar-privacy-note">Только события, добавленные в этот блокнот. Они хранятся локально на устройстве.</p>
+            <section class="agenda"><p class="eyebrow" id="agendaLabel">ВЫБЕРИ ДЕНЬ</p><h2 id="agendaTitle">Сегодня</h2><div id="agendaItems" class="agenda-items"></div><form id="eventForm" class="event-form"><input id="eventInput" placeholder="Добавить своё событие" aria-label="Новое событие" required /><input id="eventTime" type="time" aria-label="Время события" /><button type="submit" aria-label="Добавить событие">+</button></form>
+              <section class="calendar-integration" aria-label="Интеграция с Google Calendar"><p class="eyebrow">GOOGLE CALENDAR</p><label for="googleCalendarClientId">OAuth Client ID</label><div class="calendar-connect-row"><input id="googleCalendarClientId" autocomplete="off" placeholder="…apps.googleusercontent.com" aria-label="Google OAuth Client ID" /><button id="connectGoogleCalendar" type="button" class="outline-button">Подключить</button></div><button id="refreshGoogleCalendar" type="button" class="text-button" hidden>Синхронизировать сейчас</button><p id="calendarSyncState" class="calendar-privacy-note">Подключите Google Calendar, чтобы события из него появились здесь, а новые события Night Notes автоматически создавались в основном календаре Google.</p></section>
             </section>
           </div>
         </section>
@@ -116,17 +116,19 @@
       <form method="dialog" class="sync-dialog-card">
         <p class="eyebrow">ONE NOTEBOOK, EVERYWHERE</p>
         <h2>Автосинхронизация</h2>
-        <p id="syncMessage">Войди по email один раз на новом устройстве. Потом просто открывай Night Notes — записи загрузятся сами.</p>
+        <p id="syncMessage">Создай одну приватную ссылку и открывай её в любом браузере — там будет тот же блокнот.</p>
         <div class="sync-email-login">
           <input id="syncEmail" type="email" autocomplete="email" placeholder="твой email" aria-label="Email для синхронизации" />
           <button id="requestSyncCode" type="button" class="outline-button">Продолжить по email</button>
         </div>
-        <p class="sync-email-note">Подтверди вход из письма. Это нужно только при первом входе в новом браузере; дальше синхронизация идёт автоматически.</p>
+        <p class="sync-email-note">Вход по email — альтернативный способ синхронизации. Подтверди вход из письма один раз в новом браузере.</p>
+        <div class="sync-dialog-actions-primary"><button id="createShareLink" type="button" class="outline-button">Создать приватную ссылку</button></div>
+        <p class="sync-privacy-note">Открой эту ссылку в другом браузере или на устройстве — там будет тот же блокнот. Не пересылай её: тот, у кого есть ссылка, сможет открыть твои записи.</p>
         <div class="sync-dialog-actions"><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
       </form>
     </dialog>
     <audio id="autumnJazzRadio" preload="none" playsinline></audio>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=55"></script>
+    <script src="app.js?v=58"></script>
   </body>
 </html>
