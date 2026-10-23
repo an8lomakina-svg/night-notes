@@ -318,6 +318,11 @@ body.night .film-location span { color:#965e2f; }
   #budget .budget-chart { width:118px; }
   #budget .budget-chart::before { inset:24px; }
   #budget .budget-chart span { font-size:14px; }
-  #budget .budget-form { grid-template-columns:1fr 1fr auto; }
+  #budget .budget-form { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  #budget .budget-form > * { min-width:0; }
+  #budget .budget-form #transactionName,
+  #budget .budget-form #transactionComment,
+  #budget .budget-form .add-button { grid-column:1 / -1; }
+  #budget .budget-entry-card .budget-form .add-button { width:100%; min-width:0; min-height:42px; }
   #budget .transaction { grid-template-columns:minmax(0,1fr) auto auto auto; gap:6px; }
 }

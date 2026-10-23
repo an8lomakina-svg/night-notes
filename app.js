@@ -41,7 +41,7 @@ let selectedDate = new Date(); selectedDate.setHours(0,0,0,0); let month = new D
 const save = () => { localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); queueCloudSave(); queueSharedSave(); };
 function setSyncStatus(message, synced = false) { const button = $('#syncAccount'); if (!button) return; button.classList.toggle('is-synced', synced); button.title = message; button.setAttribute('aria-label', message); }
 function queueCloudSave() { if (!cloudClient || !cloudUser || cloudHydrating) return; clearTimeout(cloudSyncTimer); cloudSyncTimer = setTimeout(pushCloudState, 650); }
-async function pushCloudState() { if (!cloudClient || !cloudUser) return; const { error } = await cloudClient.from('notebook_state').upsert({ user_id: cloudUser.id, payload: state, updated_at: new Date().toISOString() }); if (error) setSyncStatus('Ошибка синхронизации'); else setSyncStatus(`Синхронизировано: ${cloudUser.email || 'твой аккаунт'}`, true); }
+async function pushCloudState() { if (!cloudClient || !cloudUser) return; const { error } = await cloudClient.from('notebook_state').upsert({ user_id: cloudUser.id, payload: state, updated_at: new Date().toISOString() }); if (error) setSyncStatus('Ошибка синхронизации'); else setSyncStatus(`Автосинхронизация включена: ${cloudUser.email || 'твой аккаунт'}`, true); }
 
 const SHARED_SECRET_KEY = 'night-notes-shared-secret-v1';
 const bytesToBase64 = bytes => btoa(String.fromCharCode(...bytes));
@@ -473,8 +473,8 @@ async function hydrateCloudState() {
     }
   }
   cloudHydrating = false;
-  if (syncMessage) syncMessage.textContent = `Синхронизировано для ${cloudUser.email || 'твоего аккаунта'}.`;
-  setSyncStatus(`Синхронизировано: ${cloudUser.email || 'твой аккаунт'}`, true);
+  if (syncMessage) syncMessage.textContent = `Автосинхронизация включена для ${cloudUser.email || 'твоего аккаунта'}.`;
+  setSyncStatus(`Автосинхронизация включена: ${cloudUser.email || 'твой аккаунт'}`, true);
 }
 
 async function initCloudSync() {
@@ -494,16 +494,27 @@ async function initCloudSync() {
     await ensureSharedSync();
     await hydrateSharedState();
   } else {
-    setSyncStatus('Войти по email');
+    setSyncStatus('Войти по email, чтобы включить автосинхронизацию');
   }
   cloudClient.auth.onAuthStateChange((_event, nextSession) => {
     cloudUser = nextSession?.user || null;
     if (syncSignOut) syncSignOut.hidden = !cloudUser;
     if (cloudUser) setTimeout(() => hydrateCloudState(), 0);
     else if (sharedSync) setSyncStatus('Приватная ссылка синхронизирована', true);
-    else setSyncStatus('Войти по email');
+    else setSyncStatus('Войти по email, чтобы включить автосинхронизацию');
   });
 }
+
+// A browser with an active session always refreshes when the notebook becomes
+// visible again. This keeps devices in step without any manual export or link.
+function refreshCloudStateWhenVisible() {
+  if (!cloudUser || cloudHydrating || cloudSyncTimer) return;
+  hydrateCloudState();
+}
+window.addEventListener('focus', refreshCloudStateWhenVisible);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshCloudStateWhenVisible();
+});
 
 const requestSyncCode = $('#requestSyncCode');
 requestSyncCode?.addEventListener('click', async () => {
@@ -516,16 +527,16 @@ requestSyncCode?.addEventListener('click', async () => {
     syncMessage.textContent = `Не удалось отправить ссылку: ${error.message}`;
     return;
   }
-  syncMessage.textContent = 'Ссылка отправлена. Открой письмо на этом телефоне и нажми «Войти». Затем вернись в Night Notes.';
+  syncMessage.textContent = 'Проверь почту и подтверди вход. После этого этот браузер будет загружать и сохранять блокнот автоматически.';
 });
 
 $('#syncAccount').onclick = () => {
   if (!syncDialog) return;
   if (cloudUser) {
-    syncMessage.textContent = `Синхронизировано для ${cloudUser.email || 'твоего аккаунта'}.`;
+    syncMessage.textContent = `Автосинхронизация включена для ${cloudUser.email || 'твоего аккаунта'}.`;
     syncSignOut.hidden = false;
   } else {
-    syncMessage.textContent = sharedSync ? 'Приватный блокнот подключён. Для телефона лучше войти по email.' : 'Войди по email — это новый способ синхронизации без секретной ссылки.';
+    syncMessage.textContent = sharedSync ? 'Приватный блокнот подключён. Для постоянной синхронизации войди по email.' : 'Войди по email один раз на этом устройстве — дальше всё будет синхронизироваться автоматически.';
     syncSignOut.hidden = true;
   }
   syncDialog.showModal();

@@ -114,21 +114,19 @@
     <template id="taskTemplate"><article class="task"><button class="checkbox" aria-label="Отметить выполненной"></button><span class="task-text"></span><button class="archive-action" aria-label="Архивировать задачу">↙</button><button class="delete" aria-label="Удалить задачу">×</button></article></template>
     <dialog id="syncDialog" class="sync-dialog">
       <form method="dialog" class="sync-dialog-card">
-        <p class="eyebrow">ONE PRIVATE SOURCE</p>
-        <h2>Синхронизация</h2>
-        <p id="syncMessage">Войди по email — тогда бюджет и остальные записи будут загружаться на любом телефоне.</p>
+        <p class="eyebrow">ONE NOTEBOOK, EVERYWHERE</p>
+        <h2>Автосинхронизация</h2>
+        <p id="syncMessage">Войди по email один раз на новом устройстве. Потом просто открывай Night Notes — записи загрузятся сами.</p>
         <div class="sync-email-login">
           <input id="syncEmail" type="email" autocomplete="email" placeholder="твой email" aria-label="Email для синхронизации" />
-          <button id="requestSyncCode" type="button" class="outline-button">Отправить ссылку</button>
+          <button id="requestSyncCode" type="button" class="outline-button">Продолжить по email</button>
         </div>
-        <p class="sync-email-note">Открой письмо на телефоне и нажми кнопку входа. После этого блокнот загрузит данные из облака.</p>
-        <div class="sync-dialog-actions sync-dialog-actions-primary"><button id="createShareLink" type="button" class="outline-button">Создать приватную ссылку</button></div>
-        <p class="sync-privacy-note">Ссылка содержит секретный ключ. Не отправляй её другим людям.</p>
+        <p class="sync-email-note">Подтверди вход из письма. Это нужно только при первом входе в новом браузере; дальше синхронизация идёт автоматически.</p>
         <div class="sync-dialog-actions"><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
       </form>
     </dialog>
     <audio id="autumnJazzRadio" preload="none" playsinline></audio>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=53"></script>
+    <script src="app.js?v=54"></script>
   </body>
 </html>
