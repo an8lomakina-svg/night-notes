@@ -123,12 +123,13 @@
         </div>
         <p class="sync-email-note">Вход по email — альтернативный способ синхронизации. Подтверди вход из письма один раз в новом браузере.</p>
         <div class="sync-dialog-actions-primary"><button id="createShareLink" type="button" class="outline-button">Создать приватную ссылку</button></div>
+        <input id="shareLink" class="share-link" type="url" readonly hidden aria-label="Приватная ссылка на блокнот" />
         <p class="sync-privacy-note">Открой эту ссылку в другом браузере или на устройстве — там будет тот же блокнот. Не пересылай её: тот, у кого есть ссылка, сможет открыть твои записи.</p>
         <div class="sync-dialog-actions"><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
       </form>
     </dialog>
     <audio id="autumnJazzRadio" preload="none" playsinline></audio>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=58"></script>
+    <script src="app.js?v=59"></script>
   </body>
 </html>
