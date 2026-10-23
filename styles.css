@@ -55,6 +55,17 @@ body { background:#f5eddf; color:var(--ink); }
 @media (max-width:760px) { .chatgpt-button small { display:none; } }
 
 .calendar-privacy-note { margin:24px 0 0; padding:12px 13px; border:1px dashed rgba(91,61,38,.24); background:rgba(255,252,247,.55); color:#725b49; font-size:11px; line-height:1.45; }
+.calendar-integration { margin-top:24px; padding:14px; border:1px solid rgba(91,61,38,.18); background:rgba(255,252,247,.52); }
+.calendar-integration label { display:block; margin-bottom:7px; color:#765a46; font:9px "DM Mono",monospace; letter-spacing:.08em; text-transform:uppercase; }
+.calendar-connect-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+.calendar-connect-row input { min-width:0; padding:10px; border:1px solid rgba(91,61,38,.22); background:#fffdf8; color:#493125; }
+.calendar-integration .text-button { margin-top:12px; color:#a85e2c; }
+.calendar-privacy-note.is-error { border-color:#b25140; color:#8a3c2f; }
+.event-title { flex:1; }
+.event-actions { display:flex; align-items:center; gap:7px; }
+.event-edit,.event-source { border:0; background:none; color:#a85e2c; font-size:10px; }
+.event-source { color:#54784f; font:9px "DM Mono",monospace; text-transform:uppercase; }
+@media(max-width:520px){.calendar-connect-row{grid-template-columns:1fr}.calendar-connect-row .outline-button{width:100%}}
 
 .nav-link { text-decoration:none; display:block; }
 main:has(#plans:target) #today, main:has(#calendar:target) #today, main:has(#archive:target) #today, main:has(#shopping:target) #today, main:has(#budget:target) #today, main:has(#health:target) #today { display:none; }
