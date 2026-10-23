@@ -90,11 +90,15 @@ function queueSharedSave() {
   sharedSyncTimer = setTimeout(pushSharedState, 700);
 }
 async function pushSharedState() {
-  if (!cloudClient || !sharedSync || sharedHydrating) return;
+  if (!cloudClient || !sharedSync || sharedHydrating) return false;
   const payload = await encryptSharedState(sharedSync.secret, state);
   const { error } = await cloudClient.rpc('save_shared_notebook', { p_sync_id: sharedSync.id, p_payload: payload });
-  if (error) setSyncStatus('Ошибка приватной синхронизации');
-  else setSyncStatus('Приватная ссылка синхронизирована', true);
+  if (error) {
+    setSyncStatus('Ошибка приватной синхронизации');
+    return false;
+  }
+  setSyncStatus('Приватная ссылка синхронизирована', true);
+  return true;
 }
 async function hydrateSharedState() {
   if (!cloudClient || !sharedSync) return;
@@ -196,13 +200,184 @@ const activateView = (viewName, shouldScroll = false) => {
 document.querySelectorAll('.nav-link').forEach(button => button.onclick = () => activateView(button.dataset.view, true));
 activateView(window.location.hash.slice(1));
 window.addEventListener('hashchange', () => activateView(window.location.hash.slice(1)));
-function allEvents(key){return [
-  ...(state.events[key]||[]).map((event,index)=>({...event,source:'local',index})),
-  ...state.imports.map((event,index)=>event.date===key?{...event,source:'import',index}:null).filter(Boolean)
-]}
+
+const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+const googleCalendar = { clientId: localStorage.getItem('night-notes-google-client-id') || '', accessToken: null, tokenClient: null, syncing: false };
+const clientIdInput = $('#googleCalendarClientId');
+const connectGoogleCalendar = $('#connectGoogleCalendar');
+const refreshGoogleCalendar = $('#refreshGoogleCalendar');
+const calendarSyncState = $('#calendarSyncState');
+if (clientIdInput) clientIdInput.value = googleCalendar.clientId;
+
+const setGoogleStatus = (message, isError = false) => {
+  if (!calendarSyncState) return;
+  calendarSyncState.textContent = message;
+  calendarSyncState.classList.toggle('is-error', isError);
+};
+const isGoogleConnected = () => Boolean(googleCalendar.accessToken);
+const showGoogleError = error => {
+  console.error(error);
+  setGoogleStatus(`Не удалось синхронизировать календарь: ${error?.message || 'попробуйте ещё раз'}`, true);
+};
+const dateAfter = date => dateKey(new Date(new Date(`${date}T12:00:00`).getTime() + 86400000));
+const localDateTime = value => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}T${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}:00`;
+
+function googleEventPayload(title, date, time) {
+  if (!time || time === 'ВЕСЬ ДЕНЬ') return { summary: title, start: { date }, end: { date: dateAfter(date) } };
+  const start = new Date(`${date}T${time}:00`), end = new Date(start.getTime() + 60 * 60 * 1000);
+  return { summary: title, start: { dateTime: localDateTime(start), timeZone: 'Europe/Belgrade' }, end: { dateTime: localDateTime(end), timeZone: 'Europe/Belgrade' } };
+}
+async function googleApi(path, options = {}) {
+  if (!isGoogleConnected()) throw new Error('Сначала подключите Google Calendar');
+  const response = await fetch(`https://www.googleapis.com/calendar/v3${path}`, { ...options, headers: { Authorization: `Bearer ${googleCalendar.accessToken}`, 'Content-Type': 'application/json', ...(options.headers || {}) } });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error?.message || `Google Calendar вернул код ${response.status}`);
+  }
+  return response.status === 204 ? null : response.json();
+}
+function findNotebookGoogleEvent(googleId) {
+  for (const [date, events] of Object.entries(state.events)) {
+    const index = events.findIndex(event => event.googleId === googleId);
+    if (index >= 0) return { date, index, event: events[index] };
+  }
+  return null;
+}
+function removeNotebookEvent(date, index) {
+  state.events[date].splice(index, 1);
+  if (!state.events[date].length) delete state.events[date];
+}
+function upsertGoogleEvent(remote) {
+  const date = remote.start?.dateTime?.slice(0, 10) || remote.start?.date;
+  if (!date) return;
+  const time = remote.start?.dateTime?.slice(11, 16) || 'ВЕСЬ ДЕНЬ';
+  const existing = findNotebookGoogleEvent(remote.id);
+  const event = { title: remote.summary || 'Без названия', time, googleId: remote.id, googleUpdated: remote.updated || new Date().toISOString() };
+  if (existing) {
+    if (existing.date !== date) removeNotebookEvent(existing.date, existing.index);
+    else state.events[existing.date][existing.index] = event;
+  }
+  if (!existing || existing.date !== date) (state.events[date] ??= []).push(event);
+}
+async function syncNotebookEventsToGoogle() {
+  const pending = [];
+  Object.entries(state.events).forEach(([date, events]) => events.forEach(event => {
+    if (!event.googleId) pending.push({ date, event });
+  }));
+  for (const item of pending) {
+    const created = await googleApi('/calendars/primary/events', { method: 'POST', body: JSON.stringify(googleEventPayload(item.event.title, item.date, item.event.time)) });
+    item.event.googleId = created.id;
+    item.event.googleUpdated = created.updated || new Date().toISOString();
+  }
+  return pending.length;
+}
+async function refreshGoogleEvents() {
+  if (!isGoogleConnected() || googleCalendar.syncing) return;
+  googleCalendar.syncing = true;
+  try {
+    const first = new Date(month.getFullYear(), month.getMonth(), 1);
+    const last = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+    const query = new URLSearchParams({ singleEvents: 'true', orderBy: 'startTime', timeMin: first.toISOString(), timeMax: last.toISOString(), maxResults: '2500' });
+    const data = await googleApi(`/calendars/primary/events?${query}`);
+    const remoteEvents = (data.items || []).filter(event => event.status !== 'cancelled');
+    const remoteIds = new Set(remoteEvents.map(event => event.id));
+    const monthPrefix = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+    Object.entries(state.events).forEach(([date, events]) => {
+      if (!date.startsWith(monthPrefix)) return;
+      for (let index = events.length - 1; index >= 0; index -= 1) if (events[index].googleId && !remoteIds.has(events[index].googleId)) events.splice(index, 1);
+      if (!events.length) delete state.events[date];
+    });
+    remoteEvents.forEach(upsertGoogleEvent);
+    save();
+    renderCalendar();
+    if (refreshGoogleCalendar) refreshGoogleCalendar.hidden = false;
+    setGoogleStatus('Google Calendar синхронизирован. Изменения здесь и в Google появятся в обоих календарях после синхронизации.');
+  } finally { googleCalendar.syncing = false; }
+}
+function loadGoogleIdentity() {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts?.oauth2) return resolve();
+    const existing = document.querySelector('script[data-google-identity]');
+    if (existing) {
+      existing.addEventListener('load', resolve, { once: true });
+      existing.addEventListener('error', () => reject(new Error('Не удалось загрузить Google OAuth')), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleIdentity = 'true';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Не удалось загрузить Google OAuth'));
+    document.head.append(script);
+  });
+}
+function allEvents(key) { return [
+  ...(state.events[key] || []).map((event, index) => ({ ...event, source: event.googleId ? 'google' : 'local', index })),
+  ...state.imports.map((event, index) => event.date === key ? { ...event, source: 'import', index } : null).filter(Boolean)
+] }
 function renderCalendar(){ const y=month.getFullYear(),m=month.getMonth();$('#monthTitle').textContent=new Intl.DateTimeFormat('ru-RU',{month:'long',year:'numeric'}).format(month);const grid=$('#calendarGrid');grid.innerHTML=''; const start=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(); for(let i=0;i<start;i++){let e=document.createElement('span');e.className='day empty';grid.append(e)} for(let d=1;d<=days;d++){const date=new Date(y,m,d),k=dateKey(date),b=document.createElement('button');b.className='day'+(dateKey(new Date())===k?' today':'')+(dateKey(selectedDate)===k?' selected':'')+(allEvents(k).length?' has-event':'');b.textContent=d;b.onclick=()=>{selectedDate=date;renderCalendar();renderAgenda()};grid.append(b)} renderAgenda();}
-function renderAgenda(){const k=dateKey(selectedDate), events=allEvents(k);$('#agendaLabel').textContent=niceDate(selectedDate).toUpperCase();$('#agendaTitle').textContent=dateKey(selectedDate)===dateKey(new Date())?'Сегодня':'На этот день';const box=$('#agendaItems');box.innerHTML=events.length?'':'<p class="empty">Пока здесь свободно. В этом тоже есть свой ритм.</p>';events.forEach(e=>{const x=document.createElement('div');x.className='event';x.innerHTML=`<span class="event-time">${e.time||'ВЕСЬ ДЕНЬ'}</span><span class="event-title"></span><button class="archive-action" type="button" aria-label="Архивировать событие">↙</button><button class="delete" type="button" aria-label="Удалить событие">×</button>`;x.querySelector('.event-title').textContent=e.title;const remove=()=>{if(e.source==='local'){state.events[k].splice(e.index,1);if(!state.events[k].length)delete state.events[k]}else{state.imports.splice(e.index,1)}};x.querySelector('.archive-action').onclick=()=>{archiveRecord({type:'СОБЫТИЕ',text:e.title,source:'event',payload:{date:k,time:e.time||'ВЕСЬ ДЕНЬ',title:e.title}});remove();save();renderCalendar()};x.querySelector('.delete').onclick=()=>{remove();save();renderCalendar()};box.append(x)})}
-$('#prevMonth').onclick=()=>{month.setMonth(month.getMonth()-1);renderCalendar()};$('#nextMonth').onclick=()=>{month.setMonth(month.getMonth()+1);renderCalendar()}; $('#eventForm').addEventListener('submit',e=>{e.preventDefault();const x=$('#eventInput');if(!x.value.trim())return;const k=dateKey(selectedDate);(state.events[k]??=[]).push({title:x.value.trim(),time:'МОЙ ПЛАН'});x.value='';save();renderCalendar()});
+function promptEventChange(event) {
+  const title = prompt('Название события:', event.title);
+  if (title === null || !title.trim()) return null;
+  const time = prompt('Время в формате ЧЧ:ММ. Оставьте пустым для события на весь день:', event.time === 'ВЕСЬ ДЕНЬ' ? '' : event.time);
+  if (time === null || (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time.trim()))) {
+    if (time !== null) alert('Введите время в формате ЧЧ:ММ.');
+    return null;
+  }
+  return { title: title.trim(), time: time.trim() || 'ВЕСЬ ДЕНЬ' };
+}
+async function updateCalendarEvent(event, date) {
+  const change = promptEventChange(event);
+  if (!change) return;
+  try {
+    if (event.googleId) await googleApi(`/calendars/primary/events/${encodeURIComponent(event.googleId)}`, { method: 'PATCH', body: JSON.stringify(googleEventPayload(change.title, date, change.time)) });
+    if (event.source === 'import') Object.assign(state.imports[event.index], change);
+    else Object.assign(state.events[date][event.index], change);
+    save();
+    await refreshGoogleEvents();
+    renderCalendar();
+  } catch (error) { showGoogleError(error); }
+}
+async function deleteCalendarEvent(event, date) {
+  if (!confirm(`Удалить «${event.title}»${event.googleId ? ' и из Google Calendar' : ''}?`)) return;
+  try {
+    if (event.googleId) await googleApi(`/calendars/primary/events/${encodeURIComponent(event.googleId)}`, { method: 'DELETE' });
+    if (event.source === 'import') state.imports.splice(event.index, 1);
+    else removeNotebookEvent(date, event.index);
+    save();
+    await refreshGoogleEvents();
+    renderCalendar();
+  } catch (error) { showGoogleError(error); }
+}
+function renderAgenda(){const k=dateKey(selectedDate), events=allEvents(k);$('#agendaLabel').textContent=niceDate(selectedDate).toUpperCase();$('#agendaTitle').textContent=dateKey(selectedDate)===dateKey(new Date())?'Сегодня':'На этот день';const box=$('#agendaItems');box.innerHTML=events.length?'':'<p class="empty">Пока здесь свободно. В этом тоже есть свой ритм.</p>';events.forEach(e=>{const x=document.createElement('div');x.className='event';x.innerHTML=`<span class="event-time">${e.time||'ВЕСЬ ДЕНЬ'}</span><span class="event-title"></span><span class="event-actions"><button class="event-edit" type="button">Изменить</button>${e.googleId ? '<span class="event-source">Google</span>' : e.source === 'local' ? '<button class="archive-action" type="button" aria-label="Архивировать событие">↙</button>' : ''}<button class="delete" type="button" aria-label="Удалить событие">×</button></span>`;x.querySelector('.event-title').textContent=e.title;x.querySelector('.event-edit').onclick=()=>updateCalendarEvent(e,k);const archive=x.querySelector('.archive-action');if(archive)archive.onclick=()=>{archiveRecord({type:'СОБЫТИЕ',text:e.title,source:'event',payload:{date:k,time:e.time||'ВЕСЬ ДЕНЬ',title:e.title}});removeNotebookEvent(k,e.index);save();renderCalendar()};x.querySelector('.delete').onclick=()=>deleteCalendarEvent(e,k);box.append(x)})}
+$('#prevMonth').onclick=()=>{month.setMonth(month.getMonth()-1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#nextMonth').onclick=()=>{month.setMonth(month.getMonth()+1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)}; $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const x=$('#eventInput'),time=$('#eventTime');if(!x.value.trim())return;const k=dateKey(selectedDate);const event={title:x.value.trim(),time:time.value||'ВЕСЬ ДЕНЬ'};try{if(isGoogleConnected()){const created=await googleApi('/calendars/primary/events',{method:'POST',body:JSON.stringify(googleEventPayload(event.title,k,event.time))});event.googleId=created.id;event.googleUpdated=created.updated||new Date().toISOString()}(state.events[k]??=[]).push(event);x.value='';time.value='';save();await refreshGoogleEvents();renderCalendar()}catch(error){showGoogleError(error)}});
+connectGoogleCalendar?.addEventListener('click', async () => {
+  const clientId = clientIdInput?.value.trim();
+  if (!clientId) { setGoogleStatus('Введите OAuth Client ID из Google Cloud.', true); return; }
+  try {
+    setGoogleStatus('Открываю вход в Google…');
+    await loadGoogleIdentity();
+    localStorage.setItem('night-notes-google-client-id', clientId);
+    googleCalendar.clientId = clientId;
+    googleCalendar.tokenClient = window.google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: GOOGLE_CALENDAR_SCOPE, callback: async response => {
+      if (response.error) { showGoogleError(new Error(response.error)); return; }
+      googleCalendar.accessToken = response.access_token;
+      try {
+        const uploaded = await syncNotebookEventsToGoogle();
+        await refreshGoogleEvents();
+        if (uploaded) setGoogleStatus(`Google Calendar подключён. В него добавлено событий Night Notes: ${uploaded}.`);
+      } catch (error) { showGoogleError(error); }
+    } });
+    googleCalendar.tokenClient.requestAccessToken({ prompt: 'consent' });
+  } catch (error) { showGoogleError(error); }
+});
+refreshGoogleCalendar?.addEventListener('click', () => refreshGoogleEvents().catch(showGoogleError));
+window.addEventListener('focus', () => refreshGoogleEvents().catch(showGoogleError));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshGoogleEvents().catch(showGoogleError);
+});
 $('#importCalendar').onclick=()=>$('#icsInput').click();$('#icsInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;const raw=await f.text();let added=0;raw.split('BEGIN:VEVENT').slice(1).forEach(block=>{const val=(name)=>block.match(new RegExp(name+'(?:;[^:]*)?:(.+)'))?.[1]?.trim();const dt=val('DTSTART'),title=val('SUMMARY');if(dt&&title){const date=`${dt.slice(0,4)}-${dt.slice(4,6)}-${dt.slice(6,8)}`;const time=dt.includes('T')?`${dt.slice(9,11)}:${dt.slice(11,13)}`:'ВЕСЬ ДЕНЬ';state.imports.push({date,title,time});added++}});save();renderCalendar();alert(`Импортировано событий: ${added}`);e.target.value=''};
 function restoreArchive(entry){const payload=entry.payload||{};if(entry.source==='task')state.tasks.push(payload);if(entry.source==='plan')state.plans[payload.key].push(payload.text);if(entry.source==='focus'){state.focus=payload.text||entry.text;$('#focusInput').value=state.focus}if(entry.source==='event'){(state.events[payload.date]??=[]).push({title:payload.title,time:payload.time})}if(entry.source==='shopping-item'){const list=state.shoppingLists.find(x=>x.id===payload.listId)||{id:payload.listId||Date.now(),name:payload.listName||'Мой список',items:[]};if(!state.shoppingLists.includes(list))state.shoppingLists.push(list);list.items.push(payload.item)}if(entry.source==='shopping-list'){state.shoppingLists.push(payload.list)}if(entry.source==='budget')state.budget.transactions.push(payload.item);if(entry.source==='health')state.health[payload.kind].push(payload.item);state.archive=state.archive.filter(x=>x.id!==entry.id);save();renderTasks();renderPlans();renderCalendar();renderShopping();renderBudget();renderHealth('done');renderHealth('todo')}
 function renderArchive(){const entries=state.archive;const b=$('#archiveList');b.innerHTML=entries.length?'':'<p class="empty">Здесь появятся записи, которые ты отправишь в архив.</p>';entries.forEach(entry=>{const el=document.createElement('article');el.className='archive-entry';const date=entry.archivedAt?new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'short'}).format(new Date(entry.archivedAt)).toUpperCase():'АРХИВ';el.innerHTML=`<time>${entry.type} · ${date}</time><p></p><div class="archive-actions"><button class="restore-action" type="button">Вернуть</button><button class="delete" type="button" aria-label="Удалить запись из архива">×</button></div>`;el.querySelector('p').textContent=entry.text;el.querySelector('.restore-action').onclick=()=>restoreArchive(entry);el.querySelector('.delete').onclick=()=>{state.archive=state.archive.filter(x=>x.id!==entry.id);save()};b.append(el)})} renderArchive();
@@ -511,9 +686,19 @@ function refreshCloudStateWhenVisible() {
   if (!cloudUser || cloudHydrating || cloudSyncTimer) return;
   hydrateCloudState();
 }
-window.addEventListener('focus', refreshCloudStateWhenVisible);
+function refreshSharedStateWhenVisible() {
+  if (!sharedSync || sharedHydrating || cloudUser) return;
+  hydrateSharedState();
+}
+window.addEventListener('focus', () => {
+  refreshCloudStateWhenVisible();
+  refreshSharedStateWhenVisible();
+});
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') refreshCloudStateWhenVisible();
+  if (document.visibilityState === 'visible') {
+    refreshCloudStateWhenVisible();
+    refreshSharedStateWhenVisible();
+  }
 });
 
 const requestSyncCode = $('#requestSyncCode');
@@ -536,24 +721,35 @@ $('#syncAccount').onclick = () => {
     syncMessage.textContent = `Автосинхронизация включена для ${cloudUser.email || 'твоего аккаунта'}.`;
     syncSignOut.hidden = false;
   } else {
-    syncMessage.textContent = sharedSync ? 'Приватный блокнот подключён. Для постоянной синхронизации войди по email.' : 'Войди по email один раз на этом устройстве — дальше всё будет синхронизироваться автоматически.';
+    syncMessage.textContent = sharedSync ? 'Приватный блокнот подключён. Открывай эту же ссылку в других браузерах.' : 'Создай приватную ссылку и открывай её в любом браузере — там будет тот же блокнот. Вход по email остаётся альтернативой.';
     syncSignOut.hidden = true;
   }
   syncDialog.showModal();
 };
 
 $('#createShareLink')?.addEventListener('click', async () => {
-  const sync = await ensureSharedSync();
-  if (!sync) return;
-  await pushSharedState();
-  const link = new URL(window.location.href);
-  // Put the key in the query string as well as the hash. The query survives
-  // more reliably when a user adds the page to the iOS Home Screen.
-  link.searchParams.set('sync', sync.secret);
-  const currentView = window.location.hash && !window.location.hash.includes('sync=') ? window.location.hash : '#today';
-  link.hash = currentView;
-  try { await navigator.clipboard.writeText(link.toString()); } catch {}
-  syncMessage.textContent = 'Приватная ссылка скопирована. Открой её на телефоне, дождись бюджета и только потом добавляй на экран Домой.';
+  const button = $('#createShareLink');
+  if (!cloudClient) {
+    syncMessage.textContent = 'Синхронизация ещё запускается. Подожди секунду и попробуй снова.';
+    return;
+  }
+  button.disabled = true;
+  try {
+    const sync = await ensureSharedSync();
+    if (!sync || !await pushSharedState()) throw new Error('save_failed');
+    const link = new URL(window.location.href);
+    // Put the key in the query string as well as the hash. The query survives
+    // more reliably when a user adds the page to the iOS Home Screen.
+    link.searchParams.set('sync', sync.secret);
+    const currentView = window.location.hash && !window.location.hash.includes('sync=') ? window.location.hash : '#today';
+    link.hash = currentView;
+    try { await navigator.clipboard.writeText(link.toString()); } catch {}
+    syncMessage.textContent = 'Приватная ссылка скопирована. Открой именно её в каждом браузере — изменения будут появляться при возвращении к вкладке.';
+  } catch {
+    syncMessage.textContent = 'Не удалось создать приватную ссылку. Проверь подключение и попробуй ещё раз.';
+  } finally {
+    button.disabled = false;
+  }
 });
 
 syncSignOut?.addEventListener('click', async () => {
