@@ -121,6 +121,7 @@ body.night .film-location span { color:#965e2f; }
 .profile:focus-visible { outline:2px solid #c87532; outline-offset:3px; }
 @media (max-width:760px) { .sync-dialog-card { padding:20px; }.sync-dialog-actions { flex-wrap:wrap; }.sync-dialog-actions .outline-button { width:100%; margin-right:0; } }
 .sync-dialog-actions-primary { margin-top:4px; }
+.share-link { box-sizing:border-box; width:100%; margin-top:10px; padding:9px 10px; border:1px solid rgba(91,61,38,.24); border-radius:6px; background:#fffdf8; color:#493125; font:10px "DM Mono",monospace; }
 .google-sync-button { width:100%; padding:11px 14px; border:1px solid #b56a37; background:#fffdf8; color:#493125; font-size:13px; font-weight:600; box-shadow:0 4px 12px rgba(112,71,35,.08); }
 .google-sync-button:hover { background:#fff5e8; }
 .google-sync-button:disabled { opacity:.58; cursor:wait; }
