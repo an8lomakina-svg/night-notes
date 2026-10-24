@@ -1,4 +1,28 @@
 const $ = (s) => document.querySelector(s);
+// Google Finance quotes: units of each currency per 1 EUR. Quote dates are explicit.
+const generalChartRates = { EUR: 1, RSD: 117.5, RUB: 91.3471, AMD: 407 };
+const generalChartQuoteDates = { RSD: '23.10.2026', RUB: '24.10.2026', AMD: '16.10.2026' };
+function budgetChartIncludes(item, selected) {
+  return item.type === 'expense' && (selected === 'ALL' || (item.currency || 'RUB') === selected);
+}
+function budgetChartExpenses(transactions, selected) {
+  return transactions.filter(item => budgetChartIncludes(item, selected)).map(item => ({
+    ...item, amount: selected === 'ALL' ? item.amount / generalChartRates[item.currency || 'RUB'] : item.amount
+  }));
+}
+function renderGeneralChartNote(selected) {
+  let note = $('#budgetGeneralRateNote');
+  if (!note) {
+    note = document.createElement('p');
+    note.id = 'budgetGeneralRateNote';
+    note.className = 'budget-euro-overview-note';
+    $('#budgetCurrencyFilter').closest('.utility-heading').after(note);
+  }
+  note.hidden = selected !== 'ALL';
+  note.textContent = 'Все расходы в EUR · сохранённые котировки Google Finance. 1 € = ' +
+    ['RSD', 'RUB', 'AMD'].map(code => `${generalChartRates[code]} ${code} (${generalChartQuoteDates[code]})`).join(' · ');
+}
+
 const state = JSON.parse(localStorage.getItem('night-notes-v1') || 'null') || {
   focus: '', tasks: [{ id: 1, text: 'Прогуляться без наушников', done: false }, { id: 2, text: 'Разобрать одну важную вещь', done: false }],
   plans: { dream: ['Увидеть осенний Нью-Йорк'], next: ['Собрать блокнот под себя'], done: [] }, events: {}, imports: []
@@ -457,7 +481,7 @@ const budgetEntriesByDate = (entries = state.budget.transactions) => [...entries
   };
   return timestamp(right) - timestamp(left);
 });
-function renderBudget(){ const tx=state.budget.transactions;const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const filtered=tx.filter(x=>x.type==='expense'&&code(x)===selected);const parts={};filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const sum=list=>list.reduce((total,item)=>total+item.amount,0);const byCategory=category=>filtered.filter(item=>item.category===category);const food=[...byCategory('Доставка еды'),...byCategory('Рестораны и кофе')];const rides=byCategory('Такси');const pending=filtered.filter(item=>/в обработке/i.test(item.name));const insights=[['ЕДА ВНЕ ДОМА',currency(sum(food),selected),`${food.length} ${food.length===1?'операция':'операций'}`],['ТАКСИ',currency(sum(rides),selected),`${rides.length} ${rides.length===1?'поездка':'поездок'}`],['В ОБРАБОТКЕ',currency(sum(pending),selected),pending.length?`${pending.length} ${pending.length===1?'операция':'операций'}`:'всё подтверждено']];const insightBox=$('#budgetInsights');insightBox.innerHTML='';insights.forEach(([label,value,note])=>{const item=document.createElement('article');item.className='budget-insight';item.innerHTML='<small></small><strong></strong><span></span>';item.querySelector('small').textContent=label;item.querySelector('strong').textContent=value;item.querySelector('span').textContent=note;insightBox.append(item)});const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,selected)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${key}</span><strong>${currency(value,selected)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction';row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="archive-action" aria-label="Архивировать запись">↙</button><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${item.fromAccount} → ${item.toAccount} · `:'';row.querySelector('small').textContent=`${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.archive-action').onclick=()=>{archiveRecord({type:item.type==='income'?'ДОХОД':item.type==='transfer'?'ПЕРЕВОД':'РАСХОД',text:`${item.name} · ${currency(item.amount,code(item))}`,source:'budget',payload:{item:{...item}}});state.budget.transactions=state.budget.transactions.filter(x=>x.id!==item.id);save();renderBudget()};row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
+function renderBudget(){ const tx=state.budget.transactions;const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts={};filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const sum=list=>list.reduce((total,item)=>total+item.amount,0);const byCategory=category=>filtered.filter(item=>item.category===category);const food=[...byCategory('Доставка еды'),...byCategory('Рестораны и кофе')];const rides=byCategory('Такси');const pending=filtered.filter(item=>/в обработке/i.test(item.name));const insights=[['ЕДА ВНЕ ДОМА',currency(sum(food),displayCurrency),`${food.length} ${food.length===1?'операция':'операций'}`],['ТАКСИ',currency(sum(rides),displayCurrency),`${rides.length} ${rides.length===1?'поездка':'поездок'}`],['В ОБРАБОТКЕ',currency(sum(pending),displayCurrency),pending.length?`${pending.length} ${pending.length===1?'операция':'операций'}`:'всё подтверждено']];const insightBox=$('#budgetInsights');insightBox.innerHTML='';insights.forEach(([label,value,note])=>{const item=document.createElement('article');item.className='budget-insight';item.innerHTML='<small></small><strong></strong><span></span>';item.querySelector('small').textContent=label;item.querySelector('strong').textContent=value;item.querySelector('span').textContent=note;insightBox.append(item)});const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${key}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction';row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="archive-action" aria-label="Архивировать запись">↙</button><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${item.fromAccount} → ${item.toAccount} · `:'';row.querySelector('small').textContent=`${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.archive-action').onclick=()=>{archiveRecord({type:item.type==='income'?'ДОХОД':item.type==='transfer'?'ПЕРЕВОД':'РАСХОД',text:`${item.name} · ${currency(item.amount,code(item))}`,source:'budget',payload:{item:{...item}}});state.budget.transactions=state.budget.transactions.filter(x=>x.id!==item.id);save();renderBudget()};row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
 $('#transactionDate').value=new Date().toISOString().slice(0,10);
 $('#budgetCurrencyFilter').onchange=renderBudget;
 const expenseCategories=['Доставка еды','Рестораны и кофе','Продукты','Такси','Авиабилеты','Дом и аренда','Стоматолог','Аптека и здоровье','Массаж и уход','Связь и подписки','Мобильный кэш · Катя','Красота','Досуг','Прочее'];
@@ -948,9 +972,10 @@ function mountBudgetJourney() {
   mobileLayout.addEventListener?.('change', placeChartForViewport);
   const updateChartEmptyState = () => {
     const selectedCurrency = $('#budgetCurrencyFilter')?.value;
-    const hasExpenses = state.budget.transactions.some(item => item.type === 'expense' && (item.currency || 'RUB') === selectedCurrency);
+    const hasExpenses = state.budget.transactions.some(item => budgetChartIncludes(item, selectedCurrency));
     if (chartWrap) chartWrap.hidden = !hasExpenses;
     chartEmpty.hidden = hasExpenses;
+    chartEmpty.textContent = selectedCurrency === 'ALL' ? 'Добавьте расход в любой валюте — здесь появится общий график в евро.' : 'Добавьте расход в выбранной валюте — здесь появится диаграмма.';
   };
 
   const typeSelect = $('#transactionType');
@@ -975,7 +1000,7 @@ function mountBudgetJourney() {
       const item = entries[index];
       if (!item) return;
       const haystack = `${item.name} ${item.category} ${item.date} ${item.comment || ''}`.toLocaleLowerCase('ru');
-    const categoryMatches = !categoryFilter || (item.type === 'expense' && item.category === categoryFilter && (item.currency || 'RUB') === $('#budgetCurrencyFilter')?.value);
+    const categoryMatches = !categoryFilter || (item.category === categoryFilter && budgetChartIncludes(item, $('#budgetCurrencyFilter')?.value));
     const visible = (mode === 'all' || item.type === mode) && categoryMatches && (!needle || haystack.includes(needle));
       row.hidden = !visible;
       if (visible) shown += 1;
@@ -989,8 +1014,7 @@ function mountBudgetJourney() {
     const legend = $('#chartLegend');
     const selectedCurrency = $('#budgetCurrencyFilter')?.value;
     const parts = {};
-    state.budget.transactions
-      .filter(item => item.type === 'expense' && (item.currency || 'RUB') === selectedCurrency)
+    budgetChartExpenses(state.budget.transactions, selectedCurrency)
       .forEach(item => { parts[item.category] = (parts[item.category] || 0) + item.amount; });
     const segments = Object.entries(parts).map(([category, amount]) => ({ category, amount }));
     const choose = category => { categoryFilter = categoryFilter === category ? null : category; applyLedgerView(); };
@@ -1112,3 +1136,4 @@ function mountBudgetConverter() {
   refresh();
 }
 mountBudgetConverter();
+
