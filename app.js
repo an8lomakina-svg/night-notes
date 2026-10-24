@@ -37,38 +37,11 @@ state.selfCareDaily ??= {};
 const SYNC_CONFIG = { url: 'https://ucwiohxqtmdzlsboveie.supabase.co', key: 'sb_publishable_MACL1sYFp5rUQAkB26M4kQ_Bys6WsD1' };
 let cloudClient = null, cloudUser = null, cloudSyncTimer = null, cloudHydrating = false;
 let sharedSync = null, sharedSyncTimer = null, sharedHydrating = false;
-let syncRevision = 0, syncDirty = false, cloudSaving = false, sharedSaving = false;
 let selectedDate = new Date(); selectedDate.setHours(0,0,0,0); let month = new Date(selectedDate);
-const save = () => { syncRevision += 1; if (cloudUser || sharedSync) syncDirty = true; localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); queueCloudSave(); queueSharedSave(); };
+const save = () => { localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); queueCloudSave(); queueSharedSave(); };
 function setSyncStatus(message, synced = false) { const button = $('#syncAccount'); if (!button) return; button.classList.toggle('is-synced', synced); button.title = message; button.setAttribute('aria-label', message); }
-function syncFailure(message) {
-  setSyncStatus(message);
-  if (syncMessage) syncMessage.textContent = message + ' Локальная копия сохранена. Попробуй обновить страницу.';
-}
-function queueCloudSave() {
-  if (!cloudClient || !cloudUser || sharedSync || cloudHydrating || cloudSaving) return;
-  clearTimeout(cloudSyncTimer);
-  cloudSyncTimer = setTimeout(() => { cloudSyncTimer = null; pushCloudState(); }, 650);
-}
-async function pushCloudState() {
-  if (!cloudClient || !cloudUser || sharedSync || cloudSaving) return false;
-  cloudSaving = true;
-  const revision = syncRevision;
-  try {
-    const { error } = await cloudClient.from('notebook_state').upsert({ user_id: cloudUser.id, payload: JSON.parse(JSON.stringify(state)), updated_at: new Date().toISOString() });
-    if (error) throw error;
-    if (revision === syncRevision) syncDirty = false;
-    setSyncStatus('Данные сохранены в аккаунте', true);
-    return true;
-  } catch {
-    syncDirty = true;
-    syncFailure('Ошибка синхронизации');
-    return false;
-  } finally {
-    cloudSaving = false;
-    if (revision !== syncRevision) queueCloudSave();
-  }
-}
+function queueCloudSave() { if (!cloudClient || !cloudUser || cloudHydrating) return; clearTimeout(cloudSyncTimer); cloudSyncTimer = setTimeout(pushCloudState, 650); }
+async function pushCloudState() { if (!cloudClient || !cloudUser) return; const { error } = await cloudClient.from('notebook_state').upsert({ user_id: cloudUser.id, payload: state, updated_at: new Date().toISOString() }); if (error) setSyncStatus('Ошибка синхронизации'); else setSyncStatus(`Автосинхронизация включена: ${cloudUser.email || 'твой аккаунт'}`, true); }
 
 const SHARED_SECRET_KEY = 'night-notes-shared-secret-v1';
 const bytesToBase64 = bytes => btoa(String.fromCharCode(...bytes));
@@ -112,66 +85,49 @@ async function ensureSharedSync() {
   return sharedSync;
 }
 function queueSharedSave() {
-  if (!cloudClient || !sharedSync || sharedHydrating || sharedSaving) return;
+  if (!cloudClient || !sharedSync || sharedHydrating) return;
   clearTimeout(sharedSyncTimer);
-  sharedSyncTimer = setTimeout(() => { sharedSyncTimer = null; pushSharedState(); }, 700);
+  sharedSyncTimer = setTimeout(pushSharedState, 700);
 }
 async function pushSharedState() {
-  if (!cloudClient || !sharedSync || sharedSaving) return false;
-  sharedSaving = true;
-  const revision = syncRevision;
-  try {
-    const payload = await encryptSharedState(sharedSync.secret, state);
-    const { error } = await cloudClient.rpc('save_shared_notebook', { p_sync_id: sharedSync.id, p_payload: payload });
-    if (error) throw error;
-    if (revision === syncRevision) syncDirty = false;
-    setSyncStatus('Приватная ссылка синхронизирована', true);
-    return true;
-  } catch {
-    syncDirty = true;
-    syncFailure('Ошибка приватной синхронизации');
+  if (!cloudClient || !sharedSync || sharedHydrating) return false;
+  const payload = await encryptSharedState(sharedSync.secret, state);
+  const { error } = await cloudClient.rpc('save_shared_notebook', { p_sync_id: sharedSync.id, p_payload: payload });
+  if (error) {
+    setSyncStatus('Ошибка приватной синхронизации');
     return false;
-  } finally {
-    sharedSaving = false;
-    if (revision !== syncRevision) queueSharedSave();
   }
-}
-function applyRemoteState(remote) {
-  if (!remote || typeof remote !== 'object' || Array.isArray(remote)) throw new Error('invalid_notebook');
-  // Preserve the previous local notebook before replacing it with a cloud copy.
-  localStorage.setItem('night-notes-before-sync-v1', JSON.stringify(state));
-  Object.keys(state).forEach(key => delete state[key]);
-  Object.assign(state, remote);
-  normalizeCloudState();
-  localStorage.setItem('night-notes-v1', JSON.stringify(state));
-  renderCloudState();
+  setSyncStatus('Приватная ссылка синхронизирована', true);
+  return true;
 }
 async function hydrateSharedState() {
-  if (!cloudClient || !sharedSync || sharedHydrating || sharedSaving || sharedSyncTimer) return;
-  if (syncDirty) { await pushSharedState(); return; }
+  if (!cloudClient || !sharedSync) return;
   sharedHydrating = true;
-  const revision = syncRevision;
   setSyncStatus('Загружаю общий блокнот…');
-  try {
-    const { data, error } = await cloudClient.rpc('get_shared_notebook', { p_sync_id: sharedSync.id });
-    if (error) throw error;
-    const remote = data ? await decryptSharedState(sharedSync.secret, data) : null;
-    if (data && !remote) throw new Error('invalid_encrypted_notebook');
-    // An edit made while loading must not be replaced by the fetched snapshot.
-    if (revision !== syncRevision) return;
-    if ((!remote || !hasNotebookEntries(remote)) && hasNotebookEntries(state)) {
-      if (!await pushSharedState()) return;
-    } else if (remote) {
-      applyRemoteState(remote);
-    }
-    setSyncStatus('Приватная ссылка синхронизирована', true);
-    if (syncMessage) syncMessage.textContent = 'Общий блокнот подключён. Все изменения шифруются в браузере.';
-  } catch {
-    syncFailure('Не удалось загрузить приватный блокнот');
-  } finally {
+  const { data, error } = await cloudClient.rpc('get_shared_notebook', { p_sync_id: sharedSync.id });
+  if (error) {
     sharedHydrating = false;
-    if (revision !== syncRevision) queueSharedSave();
+    setSyncStatus('Ошибка приватной синхронизации');
+    if (syncMessage) syncMessage.textContent = 'Не удалось открыть приватную ссылку. Попробуй обновить страницу.';
+    return;
   }
+  const localSnapshot = JSON.parse(JSON.stringify(state));
+  let remoteState = null;
+  try { remoteState = data ? await decryptSharedState(sharedSync.secret, data) : null; } catch { remoteState = null; }
+  if (remoteState && hasNotebookEntries(localSnapshot) && !hasNotebookEntries(remoteState)) {
+    await pushSharedState();
+  } else if (remoteState) {
+    Object.keys(state).forEach(key => delete state[key]);
+    Object.assign(state, remoteState);
+    normalizeCloudState();
+    localStorage.setItem('night-notes-v1', JSON.stringify(state));
+    renderCloudState();
+  } else {
+    await pushSharedState();
+  }
+  sharedHydrating = false;
+  setSyncStatus('Приватная ссылка синхронизирована', true);
+  if (syncMessage) syncMessage.textContent = 'Общий блокнот подключён. Все изменения шифруются в браузере.';
 }
 const archiveRecord=(record)=>state.archive.unshift({id:`archive-${Date.now()}-${Math.random().toString(16).slice(2)}`,archivedAt:new Date().toISOString(),...record});
 const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -361,7 +317,7 @@ function allEvents(key) { return [
   ...(state.events[key] || []).map((event, index) => ({ ...event, source: event.googleId ? 'google' : 'local', index })),
   ...state.imports.map((event, index) => event.date === key ? { ...event, source: 'import', index } : null).filter(Boolean)
 ] }
-function renderCalendar(){ const y=month.getFullYear(),m=month.getMonth();$('#monthTitle').textContent=new Intl.DateTimeFormat('ru-RU',{month:'long',year:'numeric'}).format(month);const grid=$('#calendarGrid');grid.innerHTML=''; const start=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(); for(let i=0;i<start;i++){let e=document.createElement('span');e.className='day empty';grid.append(e)} for(let d=1;d<=days;d++){const date=new Date(y,m,d),k=dateKey(date),b=document.createElement('button');b.className='day'+(dateKey(new Date())===k?' today':'')+(dateKey(selectedDate)===k?' selected':'')+(allEvents(k).length?' has-event':'');b.textContent=d;b.onclick=()=>{selectedDate=date;renderCalendar();renderAgenda()};grid.append(b)} renderAgenda();}
+function renderCalendar(){ const y=month.getFullYear(),m=month.getMonth();$('#monthTitle').textContent=new Intl.DateTimeFormat('ru-RU',{month:'long',year:'numeric'}).format(month);const grid=$('#calendarGrid');grid.innerHTML=''; const start=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(); for(let i=0;i<start;i++){let e=document.createElement('span');e.className='day empty';grid.append(e)} for(let d=1;d<=days;d++){const date=new Date(y,m,d),k=dateKey(date),count=allEvents(k).length,b=document.createElement('button');b.className='day'+(dateKey(new Date())===k?' today':'')+(dateKey(selectedDate)===k?' selected':'')+(count?' has-event':'');b.textContent=d;b.setAttribute('aria-label',`${niceDate(date)}${count ? `, событий: ${count}` : ''}`);b.onclick=()=>{selectedDate=date;renderCalendar();renderAgenda()};grid.append(b)} renderAgenda();}
 function promptEventChange(event) {
   const title = prompt('Название события:', event.title);
   if (title === null || !title.trim()) return null;
@@ -396,7 +352,7 @@ async function deleteCalendarEvent(event, date) {
   } catch (error) { showGoogleError(error); }
 }
 function renderAgenda(){const k=dateKey(selectedDate), events=allEvents(k);$('#agendaLabel').textContent=niceDate(selectedDate).toUpperCase();$('#agendaTitle').textContent=dateKey(selectedDate)===dateKey(new Date())?'Сегодня':'На этот день';const box=$('#agendaItems');box.innerHTML=events.length?'':'<p class="empty">Пока здесь свободно. В этом тоже есть свой ритм.</p>';events.forEach(e=>{const x=document.createElement('div');x.className='event';x.innerHTML=`<span class="event-time">${e.time||'ВЕСЬ ДЕНЬ'}</span><span class="event-title"></span><span class="event-actions"><button class="event-edit" type="button">Изменить</button>${e.googleId ? '<span class="event-source">Google</span>' : e.source === 'local' ? '<button class="archive-action" type="button" aria-label="Архивировать событие">↙</button>' : ''}<button class="delete" type="button" aria-label="Удалить событие">×</button></span>`;x.querySelector('.event-title').textContent=e.title;x.querySelector('.event-edit').onclick=()=>updateCalendarEvent(e,k);const archive=x.querySelector('.archive-action');if(archive)archive.onclick=()=>{archiveRecord({type:'СОБЫТИЕ',text:e.title,source:'event',payload:{date:k,time:e.time||'ВЕСЬ ДЕНЬ',title:e.title}});removeNotebookEvent(k,e.index);save();renderCalendar()};x.querySelector('.delete').onclick=()=>deleteCalendarEvent(e,k);box.append(x)})}
-$('#prevMonth').onclick=()=>{month.setMonth(month.getMonth()-1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#nextMonth').onclick=()=>{month.setMonth(month.getMonth()+1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)}; $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const x=$('#eventInput'),time=$('#eventTime');if(!x.value.trim())return;const k=dateKey(selectedDate);const event={title:x.value.trim(),time:time.value||'ВЕСЬ ДЕНЬ'};try{if(isGoogleConnected()){const created=await googleApi('/calendars/primary/events',{method:'POST',body:JSON.stringify(googleEventPayload(event.title,k,event.time))});event.googleId=created.id;event.googleUpdated=created.updated||new Date().toISOString()}(state.events[k]??=[]).push(event);x.value='';time.value='';save();await refreshGoogleEvents();renderCalendar()}catch(error){showGoogleError(error)}});
+$('#prevMonth').onclick=()=>{month.setMonth(month.getMonth()-1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#nextMonth').onclick=()=>{month.setMonth(month.getMonth()+1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#calendarToday').onclick=()=>{selectedDate=new Date();selectedDate.setHours(0,0,0,0);month=new Date(selectedDate);renderCalendar();refreshGoogleEvents().catch(showGoogleError)}; $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const x=$('#eventInput'),time=$('#eventTime');if(!x.value.trim())return;const k=dateKey(selectedDate);const event={title:x.value.trim(),time:time.value||'ВЕСЬ ДЕНЬ'};try{if(isGoogleConnected()){const created=await googleApi('/calendars/primary/events',{method:'POST',body:JSON.stringify(googleEventPayload(event.title,k,event.time))});event.googleId=created.id;event.googleUpdated=created.updated||new Date().toISOString()}(state.events[k]??=[]).push(event);x.value='';time.value='';save();await refreshGoogleEvents();renderCalendar()}catch(error){showGoogleError(error)}});
 connectGoogleCalendar?.addEventListener('click', async () => {
   const clientId = clientIdInput?.value.trim();
   if (!clientId) { setGoogleStatus('Введите OAuth Client ID из Google Cloud.', true); return; }
@@ -631,7 +587,6 @@ function normalizeCloudState() {
 
 function renderCloudState() {
   normalizeCloudState();
-  $('#focusInput').value = state.focus;
   renderTasks();
   renderPlans();
   renderCalendar();
@@ -657,34 +612,45 @@ function hasNotebookEntries(source) {
 }
 
 async function hydrateCloudState() {
-  if (!cloudClient || !cloudUser || sharedSync || cloudHydrating || cloudSaving || cloudSyncTimer) return;
-  if (syncDirty) { await pushCloudState(); return; }
+  if (!cloudClient || !cloudUser) return;
   cloudHydrating = true;
-  const revision = syncRevision;
-  const userId = cloudUser.id;
   setSyncStatus('Загружаю синхронизированные данные…');
-  try {
-    const { data, error } = await cloudClient.from('notebook_state').select('payload').eq('user_id', userId).maybeSingle();
-    if (error) throw error;
-    if (revision !== syncRevision || cloudUser?.id !== userId || sharedSync) return;
-    const remote = data?.payload;
-    if ((!remote || !hasNotebookEntries(remote)) && hasNotebookEntries(state)) {
-      if (!await pushCloudState()) return;
-    } else if (remote) {
-      applyRemoteState(remote);
-    } else {
-      setSyncStatus('Аккаунт подключён, но облачная копия пока пуста');
-      if (syncMessage) syncMessage.textContent = 'Войди на устройстве, где открыт заполненный блокнот, чтобы сохранить его в аккаунте.';
-      return;
-    }
-    setSyncStatus('Данные аккаунта синхронизированы', true);
-    if (syncMessage) syncMessage.textContent = `Автосинхронизация включена для ${cloudUser.email || 'твоего аккаунта'}.`;
-  } catch {
-    syncFailure('Не удалось загрузить данные аккаунта');
-  } finally {
+  const { data, error } = await cloudClient.from('notebook_state').select('payload').eq('user_id', cloudUser.id).maybeSingle();
+  if (error) {
     cloudHydrating = false;
-    if (revision !== syncRevision) queueCloudSave();
+    setSyncStatus('Ошибка синхронизации');
+    if (syncMessage) syncMessage.textContent = 'Не удалось загрузить данные. Попробуй ещё раз.';
+    return;
   }
+  const localSnapshot = JSON.parse(JSON.stringify(state));
+  const remotePayload = data?.payload && typeof data.payload === 'object' ? data.payload : null;
+  if (remotePayload && hasNotebookEntries(localSnapshot) && !hasNotebookEntries(remotePayload)) {
+    // Do not let a newly signed-in empty device erase the filled notebook.
+    Object.keys(state).forEach(key => delete state[key]);
+    Object.assign(state, localSnapshot);
+    normalizeCloudState();
+    localStorage.setItem('night-notes-v1', JSON.stringify(state));
+    renderCloudState();
+    await pushCloudState();
+    if (syncMessage) syncMessage.textContent = 'Данные с этого устройства сохранены в общий блокнот.';
+  } else if (remotePayload) {
+    Object.keys(state).forEach(key => delete state[key]);
+    Object.assign(state, remotePayload);
+    normalizeCloudState();
+    localStorage.setItem('night-notes-v1', JSON.stringify(state));
+    renderCloudState();
+  } else {
+    // The first signed-in device may be a freshly installed phone. Never let
+    // that empty local store overwrite the filled notebook on the desktop.
+    if (hasNotebookEntries(localSnapshot)) {
+      await pushCloudState();
+    } else if (syncMessage) {
+      syncMessage.textContent = 'Аккаунт подключён, но записей пока нет. Сначала войди на устройстве, где открыт заполненный блокнот.';
+    }
+  }
+  cloudHydrating = false;
+  if (syncMessage) syncMessage.textContent = `Автосинхронизация включена для ${cloudUser.email || 'твоего аккаунта'}.`;
+  setSyncStatus(`Автосинхронизация включена: ${cloudUser.email || 'твой аккаунт'}`, true);
 }
 
 async function initCloudSync() {
@@ -696,21 +662,21 @@ async function initCloudSync() {
   const { data: { session } } = await cloudClient.auth.getSession();
   cloudUser = session?.user || null;
   if (syncSignOut) syncSignOut.hidden = !cloudUser;
-  // A remembered private notebook remains the source even after email login.
-  // Never silently alternate between two unrelated cloud records.
-  if (sharedSecretFromLocation()) {
+  if (cloudUser) {
+    await hydrateCloudState();
+  } else if (new URLSearchParams(window.location.search).has('sync') || window.location.hash.includes('sync=')) {
+    // Keep old private-link notebooks working, but do not create a new
+    // anonymous notebook for a fresh home-screen installation.
     await ensureSharedSync();
     await hydrateSharedState();
-  } else if (cloudUser) {
-    await hydrateCloudState();
   } else {
     setSyncStatus('Войти по email, чтобы включить автосинхронизацию');
   }
   cloudClient.auth.onAuthStateChange((_event, nextSession) => {
     cloudUser = nextSession?.user || null;
     if (syncSignOut) syncSignOut.hidden = !cloudUser;
-    if (sharedSync) setTimeout(() => hydrateSharedState(), 0);
-    else if (cloudUser) setTimeout(() => hydrateCloudState(), 0);
+    if (cloudUser) setTimeout(() => hydrateCloudState(), 0);
+    else if (sharedSync) setSyncStatus('Приватная ссылка синхронизирована', true);
     else setSyncStatus('Войти по email, чтобы включить автосинхронизацию');
   });
 }
@@ -718,11 +684,11 @@ async function initCloudSync() {
 // A browser with an active session always refreshes when the notebook becomes
 // visible again. This keeps devices in step without any manual export or link.
 function refreshCloudStateWhenVisible() {
-  if (!cloudUser || sharedSync || cloudHydrating || cloudSaving || cloudSyncTimer) return;
+  if (!cloudUser || cloudHydrating || cloudSyncTimer) return;
   hydrateCloudState();
 }
 function refreshSharedStateWhenVisible() {
-  if (!sharedSync || sharedHydrating || sharedSaving || sharedSyncTimer) return;
+  if (!sharedSync || sharedHydrating || cloudUser) return;
   hydrateSharedState();
 }
 window.addEventListener('focus', () => {
@@ -752,10 +718,7 @@ requestSyncCode?.addEventListener('click', async () => {
 
 $('#syncAccount').onclick = () => {
   if (!syncDialog) return;
-  if (sharedSync) {
-    syncMessage.textContent = 'Подключён приватный блокнот. Вход по email не меняет его источник данных.';
-    syncSignOut.hidden = !cloudUser;
-  } else if (cloudUser) {
+  if (cloudUser) {
     syncMessage.textContent = `Автосинхронизация включена для ${cloudUser.email || 'твоего аккаунта'}.`;
     syncSignOut.hidden = false;
   } else {
@@ -801,7 +764,7 @@ syncSignOut?.addEventListener('click', async () => {
 });
 
 setTimeout(mountBudgetJourney, 0);
-initCloudSync().catch(() => syncFailure('Не удалось подключить синхронизацию'));
+initCloudSync();
 
 // Budget journey: start with an intent, then keep the long journal easy to scan.
 function mountBudgetJourney() {
@@ -874,4 +837,3 @@ function mountBudgetJourney() {
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
 if (budgetStylesheet && !budgetStylesheet.href.includes('v=33')) budgetStylesheet.href = 'styles.css?v=33&journey=1';
 mountBudgetJourney();
-
