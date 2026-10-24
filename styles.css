@@ -527,6 +527,12 @@ body.night .film-location span { color:#965e2f; }
 #budget .budget-converter button { padding:8px 9px; border:1px solid rgba(184,104,49,.36); border-radius:5px; background:#fffaf2; color:#8c4a22; font:600 10px "Space Grotesk",sans-serif; cursor:pointer; }
 #budget .budget-converter button:hover:not(:disabled) { border-color:#b76831; background:#fff; }
 #budget .budget-converter button:disabled { cursor:not-allowed; opacity:.48; }
+#budget .budget-chart[role="button"] { cursor:pointer; }
+#budget .budget-chart[role="button"]:focus-visible { outline:2px solid #b76831; outline-offset:4px; }
+#budget .chart-legend > div[role="button"] { cursor:pointer; border-radius:4px; transition:background .16s, padding .16s; }
+#budget .chart-legend > div[role="button"]:hover,
+#budget .chart-legend > div[role="button"].is-selected { padding-left:7px; padding-right:7px; background:rgba(231,189,111,.24); }
+#budget .chart-legend > div[role="button"]:focus-visible { outline:2px solid rgba(184,104,49,.7); outline-offset:2px; }
 @media (max-width:760px) {
   #calendar .calendar-heading { align-items:flex-start; gap:18px; padding-bottom:25px; }
   #calendar .calendar-layout { grid-template-columns:1fr; gap:15px; }
