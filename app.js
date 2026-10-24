@@ -114,9 +114,10 @@ async function hydrateSharedState() {
   const localSnapshot = JSON.parse(JSON.stringify(state));
   let remoteState = null;
   try { remoteState = data ? await decryptSharedState(sharedSync.secret, data) : null; } catch { remoteState = null; }
-  if (remoteState && hasNotebookEntries(localSnapshot) && !hasNotebookEntries(remoteState)) {
-    await pushSharedState();
-  } else if (remoteState) {
+  // A private link represents one shared notebook. Its remote copy is always
+  // authoritative, including when it is intentionally empty after a cleanup.
+  // This prevents an older browser cache from restoring deleted entries.
+  if (remoteState) {
     Object.keys(state).forEach(key => delete state[key]);
     Object.assign(state, remoteState);
     normalizeCloudState();
