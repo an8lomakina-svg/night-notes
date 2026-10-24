@@ -505,6 +505,7 @@ renderBudget();
 
 const budgetAccounts = [
   { id: 'am-eur', label: 'Армянский · EUR', currency: 'EUR' },
+  { id: 'am-amd', label: 'Армянский · AMD', currency: 'AMD' },
   { id: 'rs-eur', label: 'Сербский · EUR', currency: 'EUR' },
   { id: 'rs-rsd', label: 'Сербский · RSD', currency: 'RSD' }
 ];
