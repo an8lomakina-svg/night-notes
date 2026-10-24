@@ -502,6 +502,92 @@ renderBudget = () => {
 };
 renderBudget();
 
+// Editing a journal row keeps the original operation and its sync identifier.
+const renderBudgetWithComments = renderBudget;
+renderBudget = () => {
+  renderBudgetWithComments();
+  const categoryListFor = item => item.type === 'income' ? incomeCategories : item.type === 'transfer' ? ['Перевод между своими картами'] : expenseCategories;
+  const escapeOption = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const entries = [...state.budget.transactions].reverse();
+  document.querySelectorAll('#transactionList .transaction').forEach((row, index) => {
+    const item = entries[index];
+    if (!item || row.querySelector('.transaction-edit-action')) return;
+    const copy = row.querySelector('.transaction-copy') || row.querySelector('div');
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'transaction-edit-action';
+    edit.textContent = 'Изменить';
+    const editor = document.createElement('form');
+    editor.className = 'transaction-editor';
+    const categories = categoryListFor(item);
+    editor.innerHTML = `<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"><input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"><select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select><input name="date" aria-label="Дата операции" type="date" value="${item.date || ''}"><select name="category" aria-label="Категория операции">${categories.map(category => `<option${item.category === category ? ' selected' : ''}>${escapeOption(category)}</option>`).join('')}</select><button type="submit">Сохранить</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
+    edit.onclick = () => row.classList.toggle('is-editing-transaction');
+    editor.querySelector('.transaction-edit-cancel').onclick = () => row.classList.remove('is-editing-transaction');
+    editor.onsubmit = event => {
+      event.preventDefault();
+      const data = new FormData(editor);
+      const amount = Number(data.get('amount'));
+      const name = String(data.get('name') || '').trim();
+      if (!name || !Number.isFinite(amount) || amount <= 0) return;
+      item.name = name;
+      item.amount = amount;
+      item.currency = String(data.get('currency'));
+      item.date = String(data.get('date'));
+      item.category = String(data.get('category'));
+      save();
+      renderBudget();
+    };
+    copy.append(edit, editor);
+  });
+};
+renderBudget();
+
+// The overview is always one number in EUR; the round chart stays in the chosen currency.
+const BUDGET_RATES_KEY = 'night-notes-budget-eur-rates-v1';
+const defaultBudgetRates = { EUR: 1, RSD: 117.518516, RUB: 91.064623, AMD: 404.78625 };
+let budgetEurRates = { ...defaultBudgetRates };
+let budgetRatesUpdatedAt = '';
+try {
+  const cachedRates = JSON.parse(localStorage.getItem(BUDGET_RATES_KEY) || 'null');
+  if (cachedRates?.rates?.EUR && cachedRates?.rates?.RSD && cachedRates?.rates?.RUB && cachedRates?.rates?.AMD) {
+    budgetEurRates = cachedRates.rates;
+    budgetRatesUpdatedAt = cachedRates.updatedAt || '';
+  }
+} catch {}
+function renderBudgetEuroOverview() {
+  const total = type => state.budget.transactions
+    .filter(item => item.type === type)
+    .reduce((sum, item) => sum + item.amount / (budgetEurRates[item.currency || 'RUB'] || 1), 0);
+  const income = total('income');
+  const expense = total('expense');
+  $('#incomeTotal').textContent = currency(income, 'EUR');
+  $('#expenseTotal').textContent = currency(expense, 'EUR');
+  $('#balanceTotal').textContent = currency(income - expense, 'EUR');
+  let note = $('#budgetEuroOverviewNote');
+  if (!note) {
+    note = document.createElement('p');
+    note.id = 'budgetEuroOverviewNote';
+    note.className = 'budget-euro-overview-note';
+    document.querySelector('#budget .budget-summary')?.after(note);
+  }
+  note.textContent = budgetRatesUpdatedAt ? `Общий эквивалент в EUR · средний курс на ${budgetRatesUpdatedAt} · ExchangeRate-API` : 'Общий эквивалент в EUR · загружаю средний курс…';
+}
+const renderBudgetWithEuroOverview = renderBudget;
+renderBudget = () => { renderBudgetWithEuroOverview(); renderBudgetEuroOverview(); };
+async function refreshBudgetEurRates() {
+  try {
+    const response = await fetch('https://open.er-api.com/v6/latest/EUR', { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok || data.result !== 'success' || !['RSD','RUB','AMD'].every(code => Number(data.rates?.[code]) > 0)) throw new Error('rates_unavailable');
+    budgetEurRates = { EUR: 1, RSD: data.rates.RSD, RUB: data.rates.RUB, AMD: data.rates.AMD };
+    budgetRatesUpdatedAt = data.time_last_update_utc ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(data.time_last_update_utc)) : 'сегодня';
+    localStorage.setItem(BUDGET_RATES_KEY, JSON.stringify({ rates: budgetEurRates, updatedAt: budgetRatesUpdatedAt }));
+    renderBudget();
+  } catch { renderBudgetEuroOverview(); }
+}
+renderBudget();
+refreshBudgetEurRates();
+
 const radioButton = $('#soundToggle');
 const autumnJazzRadio = $('#autumnJazzRadio');
 const autumnJazzStreams = [
@@ -884,7 +970,7 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=38')) budgetStylesheet.href = 'styles.css?v=38&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=39')) budgetStylesheet.href = 'styles.css?v=39&journey=1';
 mountBudgetJourney();
 renderBudget();
 
