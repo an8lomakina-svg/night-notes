@@ -50,6 +50,51 @@ body { background:#f5eddf; color:var(--ink); }
   .topbar .profile { font-size:15px; }
 }
 
+/* Calendar — compact plan-first layout. */
+#calendar .calendar-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:28px; padding:48px 0 28px; border-bottom:1px solid rgba(91,61,38,.14); }
+#calendar .calendar-heading h1 { font-size:clamp(42px,4.3vw,61px); }
+#calendar .calendar-heading-copy .eyebrow { margin-bottom:9px; }
+#calendar .calendar-subtitle { max-width:390px; margin:15px 0 0; color:#765a46; font-size:13px; line-height:1.5; }
+#calendar .calendar-toolbar { display:flex; align-items:center; gap:9px; padding-bottom:3px; }
+#calendar .today-button { min-height:38px; padding:0 14px; border:1px solid #c87532; border-radius:999px; background:#c87532; color:#fffaf2; font-size:12px; font-weight:600; }
+#calendar .today-button:hover { background:#a95e29; border-color:#a95e29; }
+#calendar .outline-button { min-height:38px; border-radius:999px; padding:0 14px; }
+#calendar .calendar-layout { grid-template-columns:minmax(0,1.27fr) minmax(330px,.73fr); gap:18px; margin-top:22px; }
+#calendar .mini-calendar { padding:18px 22px 21px; }
+#calendar .calendar-nav { min-height:48px; padding-bottom:10px; }
+#calendar .calendar-month { display:grid; justify-items:center; gap:3px; }
+#calendar .calendar-month span, #calendar .agenda-hint { color:#8b7565; font:8px "DM Mono",monospace; letter-spacing:.1em; text-transform:uppercase; }
+#calendar .calendar-nav h2 { font-size:24px; line-height:1.1; }
+#calendar .weekdays { margin-top:14px; }
+#calendar .calendar-grid { gap:5px; margin-top:8px; }
+#calendar .day { min-height:44px; border-radius:7px; }
+#calendar .agenda { padding:19px; }
+#calendar .agenda-heading { display:flex; justify-content:space-between; align-items:start; gap:12px; padding-bottom:14px; border-bottom:1px solid rgba(91,61,38,.12); }
+#calendar .agenda-heading .eyebrow { margin-bottom:7px; }
+#calendar .agenda h2 { font-size:28px; }
+#calendar .agenda-hint { padding-top:4px; white-space:nowrap; }
+#calendar .agenda-items { min-height:92px; margin-top:13px; }
+#calendar .event-form { grid-template-columns:minmax(0,1fr) 92px 34px; margin-top:14px; padding:4px; border:1px solid rgba(91,61,38,.16); border-radius:9px; background:#fffdf8; }
+#calendar .event-form input { padding:9px 7px; }
+#calendar .event-form #eventTime { padding-left:7px; }
+#calendar .calendar-integration { margin-top:14px; padding:0; border-radius:8px; overflow:hidden; background:rgba(244,226,199,.34); }
+#calendar .calendar-integration summary { display:flex; align-items:center; justify-content:space-between; min-height:43px; padding:0 13px; cursor:pointer; color:#604332; list-style:none; }
+#calendar .calendar-integration summary::-webkit-details-marker { display:none; }
+#calendar .calendar-integration summary span { font-size:12px; font-weight:600; }
+#calendar .calendar-integration summary small { color:#8b5c3c; font:9px "DM Mono",monospace; letter-spacing:.04em; }
+#calendar .calendar-integration[open] summary { border-bottom:1px solid rgba(91,61,38,.13); }
+#calendar .calendar-integration-body { padding:13px; }
+#calendar .calendar-integration .calendar-privacy-note { margin-bottom:0; }
+@media (max-width:760px) {
+  #calendar .calendar-heading { grid-template-columns:1fr; align-items:start; gap:18px; padding:35px 0 22px; }
+  #calendar .calendar-toolbar { width:100%; }
+  #calendar .calendar-toolbar > * { flex:1; justify-content:center; text-align:center; }
+  #calendar .calendar-layout { grid-template-columns:1fr; margin-top:15px; }
+  #calendar .mini-calendar { padding:16px 12px; }
+  #calendar .day { min-height:40px; }
+  #calendar .agenda { padding:17px; }
+}
+
 .chatgpt-button { display:flex; align-items:center; gap:8px; margin-top:23px; padding:9px 12px 9px 11px; border:1px solid rgba(112,75,44,.28); border-radius:999px; background:rgba(255,253,247,.7); color:#4a3225; box-shadow:0 3px 10px rgba(91,61,38,.08); transition:transform .18s,background .18s; }
 .chatgpt-button:hover { transform:translateY(-1px); background:#fffaf0; }.chatgpt-button>span:first-child { color:#a66636; font-size:15px; }.chatgpt-label { font-size:12px; font-weight:600; }.chatgpt-button small { padding-left:8px; border-left:1px solid rgba(112,75,44,.22); color:#867363; font:8px "DM Mono",monospace; letter-spacing:.04em; }
 @media (max-width:760px) { .chatgpt-button small { display:none; } }
