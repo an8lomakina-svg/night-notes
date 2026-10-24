@@ -95,6 +95,51 @@ body { background:#f5eddf; color:var(--ink); }
   #calendar .agenda { padding:17px; }
 }
 
+/* Budget — act first, analyse second. */
+#budget .page-heading { padding:42px 0 23px; }
+#budget .page-heading h1 { max-width:none; font-size:clamp(42px,4.4vw,59px); }
+#budget .budget-summary { margin-bottom:13px; }
+#budget .budget-summary>div { min-height:91px; padding:14px 18px 13px; }
+#budget .budget-summary>div:not(:last-child)::after { left:18px; right:18px; }
+#budget .budget-summary strong { margin-top:6px; font-size:clamp(23px,2.25vw,31px); }
+#budget .budget-accounting-note { margin:0 0 18px; padding:0 2px; color:#806b59; font-size:10px; line-height:1.42; }
+#budget .budget-insights { margin-bottom:18px !important; }
+#budget .budget-layout { grid-template-columns:minmax(0,1.08fr) minmax(290px,.92fr); gap:18px; }
+#budget .budget-entry-card { order:-1; }
+#budget .budget-entry-card .utility-heading { padding-bottom:13px; border-bottom:1px solid rgba(91,61,38,.12); }
+#budget .budget-entry-heading h2 { font-size:28px; }
+#budget .budget-quick-actions { gap:7px; margin:14px 0 12px; }
+#budget .budget-quick-action { min-height:60px; padding:9px 10px; grid-template-columns:25px 1fr; }
+#budget .budget-quick-action>span { width:24px; height:24px; font-size:16px; }
+#budget .budget-quick-action small { line-height:1.2; }
+#budget .budget-flow-hint { margin:0 0 10px; }
+#budget .budget-entry-card .budget-form { margin-top:0; grid-template-columns:repeat(3,minmax(0,1fr)); }
+#budget .budget-entry-card #transactionName { grid-column:span 2; }
+#budget .budget-entry-card #transactionAmount { grid-column:span 1; }
+#budget .budget-entry-card #transactionCategory { grid-column:span 2; }
+#budget .budget-entry-card #transactionComment { grid-column:1 / -1; min-height:55px; }
+#budget .budget-entry-card .budget-form .add-button { min-height:39px; grid-column:3; }
+#budget .budget-chart-card { min-height:100%; }
+#budget .chart-wrap { grid-template-columns:132px minmax(0,1fr); gap:18px; min-height:150px; margin-top:20px; }
+#budget .budget-chart { width:132px; }
+#budget .budget-chart::before { inset:27px; }
+#budget .budget-ledger-head { margin-top:22px; }
+@media (max-width:760px) {
+  #budget .page-heading { padding:34px 0 18px; }
+  #budget .budget-summary { margin-bottom:11px; }
+  #budget .budget-accounting-note { margin-bottom:15px; }
+  #budget .budget-layout { grid-template-columns:1fr; gap:14px; }
+  #budget .budget-entry-card .budget-form { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #budget .budget-entry-card #transactionName,
+  #budget .budget-entry-card #transactionCategory,
+  #budget .budget-entry-card #transactionComment { grid-column:1 / -1; }
+  #budget .budget-entry-card .budget-form .add-button { grid-column:1 / -1; }
+  #budget .budget-quick-actions { grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+  #budget .budget-quick-action { min-height:67px; grid-template-columns:1fr; justify-items:start; gap:2px; padding:8px; }
+  #budget .budget-quick-action>span { display:none; }
+  #budget .budget-quick-action small { font-size:9px; }
+}
+
 .chatgpt-button { display:flex; align-items:center; gap:8px; margin-top:23px; padding:9px 12px 9px 11px; border:1px solid rgba(112,75,44,.28); border-radius:999px; background:rgba(255,253,247,.7); color:#4a3225; box-shadow:0 3px 10px rgba(91,61,38,.08); transition:transform .18s,background .18s; }
 .chatgpt-button:hover { transform:translateY(-1px); background:#fffaf0; }.chatgpt-button>span:first-child { color:#a66636; font-size:15px; }.chatgpt-label { font-size:12px; font-weight:600; }.chatgpt-button small { padding-left:8px; border-left:1px solid rgba(112,75,44,.22); color:#867363; font:8px "DM Mono",monospace; letter-spacing:.04em; }
 @media (max-width:760px) { .chatgpt-button small { display:none; } }
