@@ -843,5 +843,51 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=36')) budgetStylesheet.href = 'styles.css?v=36&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=37')) budgetStylesheet.href = 'styles.css?v=37&journey=1';
 mountBudgetJourney();
+
+// Optional conversion stays in the current draft: it never creates a second record.
+function mountBudgetConverter() {
+  const amount = $('#transactionAmount');
+  const currencySelect = $('#transactionCurrency');
+  const form = $('#budgetForm');
+  if (!amount || !currencySelect || !form || form.querySelector('#budgetConverter')) return;
+  const converter = document.createElement('div');
+  converter.id = 'budgetConverter';
+  converter.className = 'budget-converter';
+  converter.hidden = true;
+  converter.innerHTML = '<label><span id="budgetRateLabel">Курс → RSD</span><input id="budgetEurRate" type="number" min="0" step="0.0001" inputmode="decimal" placeholder="Необязательно" aria-label="Курс валюты в RSD" /></label><output id="budgetConversionPreview" aria-live="polite"></output><button type="button" id="convertTransactionToRsd">Подставить RSD</button>';
+  amount.after(converter);
+  const rate = $('#budgetEurRate');
+  const rateLabel = $('#budgetRateLabel');
+  const preview = $('#budgetConversionPreview');
+  const convert = $('#convertTransactionToRsd');
+  const amountFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
+  const refresh = () => {
+    const value = Number(amount.value);
+    const rateValue = Number(rate.value);
+    const foreignCurrency = currencySelect.value !== 'RSD';
+    const hasAmount = Number.isFinite(value) && value > 0;
+    const canConvert = foreignCurrency && hasAmount && Number.isFinite(rateValue) && rateValue > 0;
+    converter.hidden = !(foreignCurrency && hasAmount);
+    rateLabel.textContent = `Курс ${currencySelect.value} → RSD`;
+    preview.textContent = canConvert
+      ? `${amountFormatter.format(value)} ${currencySelect.value} = ${amountFormatter.format(value * rateValue)} RSD`
+      : foreignCurrency && hasAmount ? 'Курс необязателен — добавьте запись как есть или укажите его для пересчёта' : '';
+    convert.disabled = !canConvert;
+  };
+  amount.addEventListener('input', refresh);
+  currencySelect.addEventListener('change', refresh);
+  rate.addEventListener('input', refresh);
+  convert.addEventListener('click', () => {
+    const value = Number(amount.value);
+    const rateValue = Number(rate.value);
+    if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(rateValue) || rateValue <= 0 || currencySelect.value === 'RSD') return;
+    amount.value = String(Math.round(value * rateValue * 100) / 100);
+    currencySelect.value = 'RSD';
+    refresh();
+    amount.focus();
+  });
+  refresh();
+}
+mountBudgetConverter();
