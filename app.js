@@ -455,24 +455,25 @@ $('#budgetCurrencyFilter').onchange=renderBudget;
 const expenseCategories=['Доставка еды','Рестораны и кофе','Продукты','Такси','Авиабилеты','Дом и аренда','Стоматолог','Аптека и здоровье','Массаж и уход','Связь и подписки','Мобильный кэш · Катя','Красота','Досуг','Прочее'];
 const incomeCategories=['Зарплата','Займ','Перевод от себя','Возврат','Подарок','Другое'];
 const transactionType=$('#transactionType'), transactionCategory=$('#transactionCategory'), transferFrom=$('#transferFrom'), transferTo=$('#transferTo');
+transactionType.querySelector('option[value="transfer"]')?.remove();
 function refreshTransactionForm(){
+  if (transactionType.value === 'transfer') transactionType.value = 'expense';
   const type=transactionType.value;
-  const categories=type==='income'?incomeCategories:type==='transfer'?['Перевод между своими картами']:expenseCategories;
+  const categories=type==='income'?incomeCategories:expenseCategories;
   const previous=transactionCategory.value;
   transactionCategory.innerHTML=categories.map(category=>`<option>${category}</option>`).join('');
   transactionCategory.value=categories.includes(previous)?previous:categories[0];
-  const isTransfer=type==='transfer';
-  transferFrom.hidden=transferTo.hidden=!isTransfer;
-  transferFrom.required=transferTo.required=isTransfer;
-  transactionCategory.disabled=isTransfer;
+  transferFrom.hidden=transferTo.hidden=true;
+  transferFrom.required=transferTo.required=false;
+  transactionCategory.disabled=false;
 }
 transactionType.onchange=refreshTransactionForm;
 refreshTransactionForm();
 $('#budgetForm').addEventListener('submit',e=>{
   e.preventDefault();
   const name=$('#transactionName'), amount=$('#transactionAmount'), type=transactionType.value;
-  if(!name.value.trim()||!Number(amount.value)||(type==='transfer'&&(!transferFrom.value.trim()||!transferTo.value.trim())))return;
-  state.budget.transactions.push({id:Date.now(),name:name.value.trim(),amount:Number(amount.value),type,category:transactionCategory.value,currency:$('#transactionCurrency').value,date:$('#transactionDate').value,fromAccount:type==='transfer'?transferFrom.value.trim():'',toAccount:type==='transfer'?transferTo.value.trim():''});
+  if(!name.value.trim()||!Number(amount.value))return;
+  state.budget.transactions.push({id:Date.now(),name:name.value.trim(),amount:Number(amount.value),type,category:transactionCategory.value,currency:$('#transactionCurrency').value,date:$('#transactionDate').value,account:$('#transactionAccount')?.value||'',fromAccount:'',toAccount:''});
   name.value='';amount.value='';transferFrom.value='';transferTo.value='';save();renderBudget();
 });
 function renderHealth(kind){const box=$(kind==='done'?'#healthDone':'#healthTodo'), list=state.health[kind];box.innerHTML=list.length?'':'<p class="empty">Пока ничего. Можно начать с одного маленького пункта.</p>';list.forEach(item=>{const row=document.createElement('div');row.className='health-item';row.innerHTML='<span>✦</span><span></span><button class="archive-action" aria-label="Архивировать заметку">↙</button><button class="delete" aria-label="Удалить заметку">×</button>';row.querySelectorAll('span')[1].textContent=item.text;row.querySelector('.archive-action').onclick=()=>{archiveRecord({type:'ЗДОРОВЬЕ',text:item.text,source:'health',payload:{kind,item:{...item}}});removeItem(list,item.id);renderHealth(kind)};row.querySelector('.delete').onclick=()=>{removeItem(list,item.id);renderHealth(kind)};box.append(row)});}
@@ -502,6 +503,13 @@ renderBudget = () => {
 };
 renderBudget();
 
+const budgetAccounts = [
+  { id: 'am-eur', label: 'Армянский · EUR', currency: 'EUR' },
+  { id: 'rs-eur', label: 'Сербский · EUR', currency: 'EUR' },
+  { id: 'rs-rsd', label: 'Сербский · RSD', currency: 'RSD' }
+];
+const accountById = id => budgetAccounts.find(account => account.id === id);
+
 // Editing a journal row keeps the original operation and its sync identifier.
 const renderBudgetWithComments = renderBudget;
 renderBudget = () => {
@@ -513,6 +521,13 @@ renderBudget = () => {
     const item = entries[index];
     if (!item || row.querySelector('.transaction-edit-action')) return;
     const copy = row.querySelector('.transaction-copy') || row.querySelector('div');
+    const account = accountById(item.account);
+    if (account) {
+      const accountNote = document.createElement('small');
+      accountNote.className = 'transaction-account';
+      accountNote.textContent = account.label;
+      copy.append(accountNote);
+    }
     const edit = document.createElement('button');
     edit.type = 'button';
     edit.className = 'transaction-edit-action';
@@ -520,7 +535,7 @@ renderBudget = () => {
     const editor = document.createElement('form');
     editor.className = 'transaction-editor';
     const categories = categoryListFor(item);
-    editor.innerHTML = `<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"><input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"><select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select><input name="date" aria-label="Дата операции" type="date" value="${item.date || ''}"><select name="category" aria-label="Категория операции">${categories.map(category => `<option${item.category === category ? ' selected' : ''}>${escapeOption(category)}</option>`).join('')}</select><button type="submit">Сохранить</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
+    editor.innerHTML = `<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"><input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"><select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select><input name="date" aria-label="Дата операции" type="date" value="${item.date || ''}"><select name="account" aria-label="Счёт операции"><option value="">Без счёта</option>${budgetAccounts.map(account => `<option value="${account.id}"${item.account === account.id ? ' selected' : ''}>${account.label}</option>`).join('')}</select><select name="category" aria-label="Категория операции">${categories.map(category => `<option${item.category === category ? ' selected' : ''}>${escapeOption(category)}</option>`).join('')}</select><button type="submit">Сохранить</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
     edit.onclick = () => row.classList.toggle('is-editing-transaction');
     editor.querySelector('.transaction-edit-cancel').onclick = () => row.classList.remove('is-editing-transaction');
     editor.onsubmit = event => {
@@ -533,6 +548,7 @@ renderBudget = () => {
       item.amount = amount;
       item.currency = String(data.get('currency'));
       item.date = String(data.get('date'));
+      item.account = String(data.get('account'));
       item.category = String(data.get('category'));
       save();
       renderBudget();
@@ -873,7 +889,7 @@ function mountBudgetJourney() {
   const quick = document.createElement('div');
   quick.className = 'budget-quick-actions';
   quick.setAttribute('aria-label', 'Быстрые действия бюджета');
-  quick.innerHTML = '<button type="button" class="budget-quick-action is-active" data-budget-action="expense"><span>−</span><strong>Расход</strong><small>покупка или услуга</small></button><button type="button" class="budget-quick-action" data-budget-action="income"><span>＋</span><strong>Доход</strong><small>зарплата или возврат</small></button><button type="button" class="budget-quick-action" data-budget-action="transfer"><span>↔</span><strong>Перевод</strong><small>между своими счетами</small></button>';
+  quick.innerHTML = '<button type="button" class="budget-quick-action is-active" data-budget-action="expense"><span>−</span><strong>Расход</strong><small>покупка или услуга</small></button><button type="button" class="budget-quick-action" data-budget-action="income"><span>＋</span><strong>Доход</strong><small>зарплата, возврат или перевод</small></button>';
   form.before(quick);
   const entryHeading = section.querySelector('.budget-entry-heading h2');
   if (entryHeading) entryHeading.textContent = 'Добавить запись';
@@ -970,9 +986,42 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=39')) budgetStylesheet.href = 'styles.css?v=39&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=40')) budgetStylesheet.href = 'styles.css?v=40&journey=1';
 mountBudgetJourney();
 renderBudget();
+
+// Accounts belong to income and expense, rather than being a separate kind of record.
+function mountBudgetAccounts() {
+  const form = $('#budgetForm');
+  const amount = $('#transactionAmount');
+  const currencySelect = $('#transactionCurrency');
+  if (!form || !amount || !currencySelect || $('#budgetAccountControl')) return;
+  const control = document.createElement('div');
+  control.id = 'budgetAccountControl';
+  control.className = 'budget-account-control';
+  control.innerHTML = `<button type="button" id="toggleTransactionAccount" class="budget-account-toggle">＋ счёт</button><label id="transactionAccountLabel" hidden><span></span><select id="transactionAccount" aria-label="Счёт операции"><option value="">Без счёта</option>${budgetAccounts.map(account => `<option value="${account.id}">${account.label}</option>`).join('')}</select></label>`;
+  amount.after(control);
+  const toggle = $('#toggleTransactionAccount');
+  const label = $('#transactionAccountLabel');
+  const select = $('#transactionAccount');
+  const labelText = label.querySelector('span');
+  const updateLabel = () => { labelText.textContent = transactionType.value === 'income' ? 'Счёт зачисления' : 'Счёт списания'; };
+  toggle.onclick = () => {
+    label.hidden = !label.hidden;
+    toggle.classList.toggle('is-open', !label.hidden);
+    toggle.textContent = label.hidden ? '＋ счёт' : '− счёт';
+    if (!label.hidden) select.focus();
+  };
+  select.onchange = () => {
+    const account = accountById(select.value);
+    if (!account) return;
+    currencySelect.value = account.currency;
+    currencySelect.dispatchEvent(new Event('change'));
+  };
+  transactionType.addEventListener('change', updateLabel);
+  updateLabel();
+}
+mountBudgetAccounts();
 
 // Optional conversion stays in the current draft: it never creates a second record.
 function mountBudgetConverter() {
