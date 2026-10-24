@@ -509,6 +509,24 @@ body.night .film-location span { color:#965e2f; }
 #calendar .calendar-integration { margin-top:18px; padding:14px; border-radius:8px; background:rgba(244,226,199,.34); }
 #calendar .calendar-integration .eyebrow { margin-bottom:9px; }
 #calendar .calendar-privacy-note { margin-top:13px; padding:10px 11px; border-radius:5px; background:rgba(255,253,248,.7); }
+#budget .budget-converter {
+  grid-column:1 / -1;
+  display:grid;
+  grid-template-columns:minmax(122px,.7fr) minmax(0,1fr) auto;
+  align-items:end;
+  gap:8px;
+  margin-top:-1px;
+  padding:9px 10px;
+  border:1px solid rgba(184,104,49,.24);
+  border-radius:7px;
+  background:#f8ead8;
+}
+#budget .budget-converter label { display:grid; gap:3px; color:#704020; font:600 9px "Space Grotesk",sans-serif; letter-spacing:.04em; text-transform:uppercase; }
+#budget .budget-converter input { width:100%; min-width:0; padding:7px 8px; border:1px solid rgba(184,104,49,.28); border-radius:5px; background:#fffaf2; color:#493125; font:500 12px "DM Mono",monospace; }
+#budget .budget-converter output { min-width:0; padding:7px 0; color:#704020; font:500 11px/1.25 "Space Grotesk",sans-serif; }
+#budget .budget-converter button { padding:8px 9px; border:1px solid rgba(184,104,49,.36); border-radius:5px; background:#fffaf2; color:#8c4a22; font:600 10px "Space Grotesk",sans-serif; cursor:pointer; }
+#budget .budget-converter button:hover:not(:disabled) { border-color:#b76831; background:#fff; }
+#budget .budget-converter button:disabled { cursor:not-allowed; opacity:.48; }
 @media (max-width:760px) {
   #calendar .calendar-heading { align-items:flex-start; gap:18px; padding-bottom:25px; }
   #calendar .calendar-layout { grid-template-columns:1fr; gap:15px; }
@@ -519,4 +537,6 @@ body.night .film-location span { color:#965e2f; }
   #calendar .event-form { grid-template-columns:minmax(0,1fr) 91px 32px; gap:5px; }
   #calendar .event { grid-template-columns:auto minmax(0,1fr); }
   #calendar .event-actions { grid-column:2; justify-self:start; }
+  #budget .budget-converter { grid-template-columns:1fr auto; align-items:end; }
+  #budget .budget-converter output { grid-column:1 / -1; grid-row:2; padding-top:0; }
 }
