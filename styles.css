@@ -565,3 +565,28 @@ body.night .film-location span { color:#965e2f; }
   #budget .budget-account-control { align-items:flex-start; flex-direction:column; gap:5px; }
   #budget .budget-account-control label { width:100%; grid-template-columns:1fr; gap:4px; }
 }
+
+/* Budget mobile pass: form first, chart only when it has something to show. */
+#budget .budget-converter[hidden] { display:none !important; }
+#budget .chart-wrap[hidden] { display:none !important; }
+#budget #budgetCurrencyFilter { min-width:52px; min-height:44px; padding:8px 10px; font-size:12px; }
+#budget .budget-chart-empty { margin:20px 0 0; padding:16px; border:1px dashed rgba(184,104,49,.34); border-radius:6px; color:#765a46; font-size:12px; line-height:1.45; background:rgba(255,253,248,.62); }
+@media (max-width:760px) {
+  .sidebar { overflow:hidden; padding:9px 12px 7px; }
+  .sidebar nav { display:flex !important; overflow-x:auto !important; gap:6px; padding:0 0 5px !important; scrollbar-width:thin; -webkit-overflow-scrolling:touch; }
+  .sidebar .nav-link { flex:0 0 76px; min-width:76px; min-height:44px; justify-content:center; }
+  #budget .budget-layout { grid-template-columns:minmax(0,1fr) !important; }
+  #budget .budget-entry-card { order:-1; }
+  #budget .budget-entry-card .budget-form { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  #budget .budget-entry-card #transactionName,
+  #budget .budget-entry-card #transactionCategory,
+  #budget .budget-entry-card #transactionComment,
+  #budget .budget-entry-card .budget-account-control,
+  #budget .budget-entry-card .budget-converter,
+  #budget .budget-entry-card .budget-form .add-button { grid-column:1 / -1; }
+  #budget .budget-entry-card > .budget-chart-card { margin:16px 0 0; padding:16px; }
+  #budget .chart-wrap { grid-template-columns:1fr; justify-items:center; }
+  #budget .chart-legend { width:100%; }
+  #budget .budget-chart-empty { margin-top:14px; }
+  #budget #budgetCurrencyFilter { min-width:64px; min-height:44px; }
+}
