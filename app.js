@@ -782,6 +782,7 @@ function mountBudgetJourney() {
   const list = $('#transactionList');
   if (!section || !summary || !form || !list || section.dataset.journeyMounted) return;
   section.dataset.journeyMounted = 'true';
+  let categoryFilter = null;
 
   const quick = document.createElement('div');
   quick.className = 'budget-quick-actions';
@@ -829,22 +830,63 @@ function mountBudgetJourney() {
       const item = entries[index];
       if (!item) return;
       const haystack = `${item.name} ${item.category} ${item.date} ${item.comment || ''}`.toLocaleLowerCase('ru');
-      const visible = (mode === 'all' || item.type === mode) && (!needle || haystack.includes(needle));
+    const categoryMatches = !categoryFilter || (item.type === 'expense' && item.category === categoryFilter && (item.currency || 'RUB') === $('#budgetCurrencyFilter')?.value);
+    const visible = (mode === 'all' || item.type === mode) && categoryMatches && (!needle || haystack.includes(needle));
       row.hidden = !visible;
       if (visible) shown += 1;
     });
     const count = $('#budgetTransactionCount');
-    if (count) count.textContent = needle || mode !== 'all' ? `${shown} найдено` : `${shown} записей`;
+    if (count) count.textContent = categoryFilter ? `${shown} · ${categoryFilter}` : needle || mode !== 'all' ? `${shown} найдено` : `${shown} записей`;
+    section.querySelectorAll('#chartLegend > div').forEach(row => row.classList.toggle('is-selected', row.dataset.category === categoryFilter));
+  };
+  const bindCategoryFilter = () => {
+    const chart = $('#budgetChart');
+    const legend = $('#chartLegend');
+    const selectedCurrency = $('#budgetCurrencyFilter')?.value;
+    const parts = {};
+    state.budget.transactions
+      .filter(item => item.type === 'expense' && (item.currency || 'RUB') === selectedCurrency)
+      .forEach(item => { parts[item.category] = (parts[item.category] || 0) + item.amount; });
+    const segments = Object.entries(parts).map(([category, amount]) => ({ category, amount }));
+    const choose = category => { categoryFilter = categoryFilter === category ? null : category; applyLedgerView(); };
+    legend.querySelectorAll(':scope > div').forEach((row, index) => {
+      const segment = segments[index];
+      if (!segment) return;
+      row.dataset.category = segment.category;
+      row.tabIndex = 0;
+      row.setAttribute('role', 'button');
+      row.setAttribute('aria-pressed', String(categoryFilter === segment.category));
+      row.title = `Показать операции: ${segment.category}`;
+      row.onclick = () => choose(segment.category);
+      row.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(segment.category); } };
+    });
+    if (!segments.length) { chart.onclick = null; chart.removeAttribute('title'); return; }
+    chart.title = 'Нажмите на сектор, чтобы показать операции этой категории';
+    chart.tabIndex = 0;
+    chart.setAttribute('role', 'button');
+    chart.setAttribute('aria-label', 'Диаграмма расходов: нажмите на сектор, чтобы отфильтровать операции');
+    chart.onclick = event => {
+      const rect = chart.getBoundingClientRect();
+      const dx = event.clientX - rect.left - rect.width / 2;
+      const dy = event.clientY - rect.top - rect.height / 2;
+      if (Math.hypot(dx, dy) < rect.width * .2) return;
+      const total = segments.reduce((sum, segment) => sum + segment.amount, 0);
+      const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 450) % 360;
+      let edge = 0;
+      const segment = segments.find(item => { edge += item.amount / total * 360; return angle < edge; });
+      if (segment) choose(segment.category);
+    };
   };
   const baseBudgetRender = renderBudget;
-  renderBudget = () => { baseBudgetRender(); applyLedgerView(); };
+  renderBudget = () => { baseBudgetRender(); bindCategoryFilter(); applyLedgerView(); };
   $('#budgetLedgerFilter').addEventListener('change', applyLedgerView);
   $('#budgetLedgerSearch').addEventListener('input', applyLedgerView);
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=37')) budgetStylesheet.href = 'styles.css?v=37&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=38')) budgetStylesheet.href = 'styles.css?v=38&journey=1';
 mountBudgetJourney();
+renderBudget();
 
 // Optional conversion stays in the current draft: it never creates a second record.
 function mountBudgetConverter() {
