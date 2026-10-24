@@ -82,6 +82,10 @@ async function ensureSharedSync() {
     localStorage.setItem(SHARED_SECRET_KEY, secret);
     sharedSync = { secret, id: await sharedId(secret) };
   }
+  // Keep the notebook address when Safari creates a Home Screen app.
+  const launchUrl = new URL(window.location.href);
+  launchUrl.searchParams.set('sync', sharedSync.secret);
+  window.history.replaceState(window.history.state, '', launchUrl.toString());
   return sharedSync;
 }
 function queueSharedSave() {
