@@ -533,14 +533,16 @@ body.night .film-location span { color:#965e2f; }
 #budget .budget-account-control label { display:grid; grid-template-columns:auto minmax(170px,1fr); align-items:center; gap:7px; width:min(100%,330px); color:#806b59; font:9px "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }
 #budget .budget-account-control select { min-width:0; padding:7px 8px; border:1px solid rgba(184,104,49,.25); border-radius:5px; background:#fffaf2; color:#493125; font:500 11px "Space Grotesk",sans-serif; text-transform:none; }
 #budget .budget-euro-overview-note { margin:-4px 0 17px; color:#806b59; font:9px/1.35 "DM Mono",monospace; letter-spacing:.01em; }
-#budget .transaction-edit-action { width:max-content; padding:3px 0; border:0; background:transparent; color:#8b5c3c; font:10px "DM Mono",monospace; }
-#budget .transaction-edit-action:hover { color:#a85e2c; text-decoration:underline; }
+#budget .transaction-edit-action { width:max-content; margin-top:5px; padding:5px 8px; border:1px solid rgba(184,104,49,.3); border-radius:4px; background:#fffaf2; color:#8b5c3c; font:600 10px "DM Mono",monospace; letter-spacing:.01em; }
+#budget .transaction-edit-action:hover { border-color:#a85e2c; background:#f7e8d4; color:#7a3e1e; }
 #budget .transaction-account { width:max-content; margin-top:3px; padding:2px 5px; border-radius:3px; background:#f3e5d2; color:#805738 !important; font:8px "DM Mono",monospace !important; }
-#budget .transaction-editor { display:none; grid-template-columns:minmax(0,1fr) 92px 64px; gap:6px; margin-top:8px; padding:9px; border:1px solid rgba(184,104,49,.24); border-radius:6px; background:#f8ead8; }
+#budget .transaction-editor { display:none; grid-template-columns:1fr 1fr; gap:7px; margin-top:8px; padding:10px; border:1px solid rgba(184,104,49,.24); border-radius:6px; background:#f8ead8; }
 #budget .transaction.is-editing-transaction .transaction-editor { display:grid; }
-#budget .transaction-editor input,#budget .transaction-editor select { min-width:0; padding:7px 8px; border:1px solid rgba(91,61,38,.18); border-radius:4px; background:#fffdf8; color:#493125; font-size:11px; }
-#budget .transaction-editor select[name="category"],#budget .transaction-editor input[name="date"] { grid-column:span 1; }
-#budget .transaction-editor button { min-height:31px; padding:0 8px; border:1px solid rgba(184,104,49,.34); border-radius:4px; background:#fffaf2; color:#8c4a22; font:600 10px "Space Grotesk",sans-serif; }
+#budget .transaction-editor label { display:grid; gap:3px; min-width:0; color:#805738; font:600 8px "DM Mono",monospace; letter-spacing:.03em; text-transform:uppercase; }
+#budget .transaction-editor input,#budget .transaction-editor select,#budget .transaction-editor textarea { width:100%; min-width:0; box-sizing:border-box; padding:7px 8px; border:1px solid rgba(91,61,38,.18); border-radius:4px; background:#fffdf8; color:#493125; font:11px "Space Grotesk",sans-serif; text-transform:none; }
+#budget .transaction-editor textarea { resize:vertical; font-family:inherit; }
+#budget .transaction-edit-wide { grid-column:1 / -1; }
+#budget .transaction-editor button { min-height:33px; padding:0 8px; border:1px solid rgba(184,104,49,.34); border-radius:4px; background:#fffaf2; color:#8c4a22; font:600 10px "Space Grotesk",sans-serif; }
 #budget .transaction-editor button[type="submit"] { background:#c87532; color:#fffaf2; }
 #budget .budget-chart[role="button"] { cursor:pointer; }
 #budget .budget-chart[role="button"]:focus-visible { outline:2px solid #b76831; outline-offset:4px; }
@@ -560,8 +562,6 @@ body.night .film-location span { color:#965e2f; }
   #calendar .event-actions { grid-column:2; justify-self:start; }
   #budget .budget-converter { grid-template-columns:1fr auto; align-items:end; }
   #budget .budget-converter output { grid-column:1 / -1; grid-row:2; padding-top:0; }
-  #budget .transaction-editor { grid-template-columns:1fr 1fr; }
-  #budget .transaction-editor input[name="name"],#budget .transaction-editor select[name="category"],#budget .transaction-editor select[name="account"] { grid-column:1 / -1; }
   #budget .budget-account-control { align-items:flex-start; flex-direction:column; gap:5px; }
   #budget .budget-account-control label { width:100%; grid-template-columns:1fr; gap:4px; }
 }
