@@ -531,11 +531,19 @@ renderBudget = () => {
     const edit = document.createElement('button');
     edit.type = 'button';
     edit.className = 'transaction-edit-action';
-    edit.textContent = 'Изменить';
+    edit.textContent = '✎ Изменить запись';
     const editor = document.createElement('form');
     editor.className = 'transaction-editor';
     const categories = categoryListFor(item);
-    editor.innerHTML = `<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"><input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"><select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select><input name="date" aria-label="Дата операции" type="date" value="${item.date || ''}"><select name="account" aria-label="Счёт операции"><option value="">Без счёта</option>${budgetAccounts.map(account => `<option value="${account.id}"${item.account === account.id ? ' selected' : ''}>${account.label}</option>`).join('')}</select><select name="category" aria-label="Категория операции">${categories.map(category => `<option${item.category === category ? ' selected' : ''}>${escapeOption(category)}</option>`).join('')}</select><button type="submit">Сохранить</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
+    editor.innerHTML = `<label>Тип<select name="type" aria-label="Тип операции"><option value="expense"${item.type === 'expense' ? ' selected' : ''}>Расход</option><option value="income"${item.type === 'income' ? ' selected' : ''}>Доход</option>${item.type === 'transfer' ? '<option value="transfer" selected>Перевод</option>' : ''}</select></label><label>Валюта<select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select></label><label class="transaction-edit-wide">Название<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"></label><label>Сумма<input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"></label><label>Дата<input name="date" aria-label="Дата операции" type="date" value="${item.date || ''}"></label><label class="transaction-edit-wide">Счёт<select name="account" aria-label="Счёт операции"><option value="">Без счёта</option>${budgetAccounts.map(account => `<option value="${account.id}"${item.account === account.id ? ' selected' : ''}>${account.label}</option>`).join('')}</select></label><label class="transaction-edit-wide">Категория<select name="category" aria-label="Категория операции"></select></label><label class="transaction-edit-wide">Комментарий<textarea name="comment" aria-label="Комментарий к операции" rows="2" placeholder="Необязательно">${escapeOption(item.comment || '')}</textarea></label><button type="submit">Сохранить изменения</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
+    const typeField = editor.querySelector('[name="type"]');
+    const categoryField = editor.querySelector('[name="category"]');
+    const setCategories = (selectedCategory = item.category) => {
+      const available = categoryListFor({ type: typeField.value });
+      categoryField.innerHTML = available.map(category => `<option${category === selectedCategory ? ' selected' : ''}>${escapeOption(category)}</option>`).join('');
+    };
+    setCategories();
+    typeField.onchange = () => setCategories();
     edit.onclick = () => row.classList.toggle('is-editing-transaction');
     editor.querySelector('.transaction-edit-cancel').onclick = () => row.classList.remove('is-editing-transaction');
     editor.onsubmit = event => {
@@ -546,10 +554,12 @@ renderBudget = () => {
       if (!name || !Number.isFinite(amount) || amount <= 0) return;
       item.name = name;
       item.amount = amount;
+      item.type = String(data.get('type'));
       item.currency = String(data.get('currency'));
       item.date = String(data.get('date'));
       item.account = String(data.get('account'));
       item.category = String(data.get('category'));
+      item.comment = String(data.get('comment') || '').trim();
       save();
       renderBudget();
     };
