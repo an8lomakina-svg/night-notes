@@ -82,10 +82,6 @@ async function ensureSharedSync() {
     localStorage.setItem(SHARED_SECRET_KEY, secret);
     sharedSync = { secret, id: await sharedId(secret) };
   }
-  // Keep the notebook address when Safari creates a Home Screen app.
-  const launchUrl = new URL(window.location.href);
-  launchUrl.searchParams.set('sync', sharedSync.secret);
-  window.history.replaceState(window.history.state, '', launchUrl.toString());
   return sharedSync;
 }
 function queueSharedSave() {
@@ -498,6 +494,14 @@ $('#budgetForm').addEventListener('submit',()=>{const name=$('#transactionName')
 $('#budgetForm').addEventListener('submit',()=>{if(budgetCommentDraft===null)return;const item=state.budget.transactions.at(-1);if(item&&budgetCommentDraft)item.comment=budgetCommentDraft;budgetCommentDraft=null;$('#transactionComment').value='';save();renderBudget()});
 renderBudget();
 
+const renderBudgetWithEmptyState = renderBudget;
+renderBudget = () => {
+  renderBudgetWithEmptyState();
+  const insightSection = document.querySelector('#budget .budget-insights');
+  if (insightSection) insightSection.hidden = state.budget.transactions.length === 0;
+};
+renderBudget();
+
 const radioButton = $('#soundToggle');
 const autumnJazzRadio = $('#autumnJazzRadio');
 const autumnJazzStreams = [
@@ -839,5 +843,5 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=34')) budgetStylesheet.href = 'styles.css?v=34&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=35')) budgetStylesheet.href = 'styles.css?v=35&journey=1';
 mountBudgetJourney();
