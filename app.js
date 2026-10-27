@@ -538,7 +538,7 @@ $('#budgetForm').addEventListener('submit',e=>{
 function renderHealth(kind){const box=$(kind==='done'?'#healthDone':'#healthTodo'), list=state.health[kind];box.innerHTML=list.length?'':'<p class="empty">Пока ничего. Можно начать с одного маленького пункта.</p>';list.forEach(item=>{const row=document.createElement('div');row.className='health-item';row.innerHTML='<span>✦</span><span></span><button class="archive-action" aria-label="Архивировать заметку">В архив</button><button class="delete" aria-label="Удалить заметку">×</button>';row.querySelectorAll('span')[1].textContent=item.text;row.querySelector('.archive-action').onclick=()=>{archiveRecord({type:'ЗДОРОВЬЕ',text:item.text,source:'health',payload:{kind,item:{...item}}});removeItem(list,item.id);renderHealth(kind)};row.querySelector('.delete').onclick=()=>{removeItem(list,item.id);renderHealth(kind)};box.append(row)});}
 [['done','healthDoneForm','healthDoneInput'],['todo','healthTodoForm','healthTodoInput']].forEach(([kind,form,input])=>{$('#'+form).addEventListener('submit',e=>{e.preventDefault();const field=$('#'+input);if(!field.value.trim())return;state.health[kind].push({id:Date.now(),text:field.value.trim()});field.value='';save();renderHealth(kind)})});
 $('#askChatGpt').onclick=()=>{const shopping=state.shoppingLists.flatMap(list=>list.items.filter(item=>!item.done).map(item=>`— ${list.name}: ${item.text}`)).join('\n')||'— пока нет';const tasks=state.tasks.filter(t=>!t.done).map(t=>`— ${t.text}`).join('\n')||'— пока нет';const tx=state.budget.transactions;const income=tx.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0),expense=tx.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);const health=state.health.todo.map(x=>`— ${x.text}`).join('\n')||'— пока нет';const context=`Помоги мне мягко спланировать ближайшие дни.\n\nФокус дня: ${state.focus||'ещё не записан'}\n\nДела:\n${tasks}\n\nПокупки:\n${shopping}\n\nБюджет: доходы ${currency(income)}, расходы ${currency(expense)}.\n\nЗапланировать по здоровью:\n${health}\n\nПредложи реалистичный следующий шаг и бережный план без перегруза.`;window.open('https://chatgpt.com/','_blank','noopener');navigator.clipboard?.writeText(context).then(()=>{const label=$('.chatgpt-label');label.textContent='Контекст скопирован';setTimeout(()=>label.textContent='Спросить ChatGPT',1800)}).catch(()=>{});};
-addDailySelfCare();
+// Legacy tasks stay in saved data but are not auto-created on the start page.
 renderTasks();
 renderShopping();renderBudget();renderHealth('done');renderHealth('todo');
 $('#quickChatGpt').onclick=()=>$('#askChatGpt').click();
@@ -1219,10 +1219,10 @@ renderBudget();
 
 // A daily artwork and quotation replace the old task-focused landing screen.
 const inspirationCatalog = [
-  { quote:'В середине зимы я наконец понял, что во мне живёт непобедимое лето.', author:'Альбер Камю', title:'Звёздная ночь', artist:'Винсент ван Гог, 1889', image:'https://upload.wikimedia.org/wikipedia/commons/e/ea/The_Starry_Night.jpg' },
-  { quote:'Нет ничего невозможного для того, кто пробует.', author:'Александр Македонский', title:'Большая волна в Канагава', artist:'Кацусика Хокусай, ок. 1831', image:'https://upload.wikimedia.org/wikipedia/commons/0/0a/The_Great_Wave_off_Kanagawa.jpg' },
-  { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', image:'https://upload.wikimedia.org/wikipedia/commons/5/54/Claude_Monet%2C_Impression%2C_sunrise.jpg' },
-  { quote:'Красота спасёт мир.', author:'Фёдор Достоевский', title:'Рождение Венеры', artist:'Сандро Боттичелли, ок. 1485', image:'https://upload.wikimedia.org/wikipedia/commons/1/1c/Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg' }
+  { quote:'В середине зимы я наконец понял, что во мне живёт непобедимое лето.', author:'Альбер Камю', title:'Звёздная ночь', artist:'Винсент ван Гог, 1889', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Starry%20Night.jpg?width=1200' },
+  { quote:'Нет ничего невозможного для того, кто пробует.', author:'Александр Македонский', title:'Большая волна в Канагава', artist:'Кацусика Хокусай, ок. 1831', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Great%20Wave%20off%20Kanagawa.jpg?width=1200' },
+  { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', image:'https://commons.wikimedia.org/wiki/Special:FilePath/Impression%2C%20Sunrise.jpg?width=1200' },
+  { quote:'Красота спасёт мир.', author:'Фёдор Достоевский', title:'Рождение Венеры', artist:'Сандро Боттичелли, ок. 1485', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Birth%20of%20Venus.jpg?width=1200' }
 ];
 function dailyInspirationIndex(key) { return [...key].reduce((sum, char) => sum + char.charCodeAt(0), 0) % inspirationCatalog.length; }
 function renderDailyInspiration() {
@@ -1232,7 +1232,7 @@ function renderDailyInspiration() {
   let entry = state.inspirationArchive.find(item => item.date === key);
   if (!entry) { entry = { date:key, ...inspirationCatalog[dailyInspirationIndex(key)] }; state.inspirationArchive.unshift(entry); save(); }
   $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
-  artwork.src = entry.image; artwork.alt = `${entry.title} — ${entry.artist}`;
+  artwork.onerror = () => { artwork.onerror = null; artwork.src = 'assets-central-park-daylight.png'; artwork.alt = `${entry.title} — ${entry.artist}`; }; artwork.src = entry.image; artwork.alt = `${entry.title} — ${entry.artist}`;
   $('#dailyArtworkTitle').textContent = entry.title; $('#dailyArtworkArtist').textContent = entry.artist;
   $('#dailyQuote').textContent = `«${entry.quote}»`; $('#dailyAuthor').textContent = `— ${entry.author}`;
   const archive = $('#inspirationArchive'); archive.innerHTML = '';
