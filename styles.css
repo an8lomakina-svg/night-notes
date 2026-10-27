@@ -830,3 +830,21 @@ button.health-quick-card { font:inherit; }
 
 .art-about-label { margin:17px 0 0; color:#a15d2b; font:9px "DM Mono",monospace; letter-spacing:.1em; }
 .art-about-label + .art-info { margin-top:6px; }
+
+
+/* Structured notes */
+.note-tools { display:flex; flex-wrap:wrap; gap:6px; }
+.note-tools button { min-height:32px; padding:0 9px; border:1px solid rgba(91,61,38,.17); border-radius:999px; background:rgba(255,253,248,.72); color:#765a46; font-size:11px; }
+.note-tools button:hover { border-color:#c87532; color:#9a5528; }
+.note-helper { margin:0; color:#8e705b; font-size:10px; line-height:1.35; }
+.note-form-actions { display:flex; align-items:center; gap:13px; }
+.note-card header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.note-card-actions { display:flex; align-items:center; gap:6px; }
+.note-card-actions button { min-height:28px; border:0; background:transparent; color:#8e705b; font-size:10px; }
+.note-card-actions .note-edit { color:#a15d2b; }
+.note-card h3 { margin:11px 0 0; color:#493125; font:500 19px/1.15 "Playfair Display",serif; }
+.note-card-body { margin-top:9px; color:#624938; white-space:pre-wrap; font:13px/1.55 "Space Grotesk",sans-serif; }
+@media (max-width:760px) {
+  .note-card header { align-items:flex-start; flex-direction:column; }
+  .note-card-actions { width:100%; justify-content:flex-end; }
+}
