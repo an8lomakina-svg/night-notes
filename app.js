@@ -1456,5 +1456,4 @@ function renderDailyInspiration() {
 }
 const renderCloudStateWithInspiration = renderCloudState;
 renderCloudState = () => { renderCloudStateWithInspiration(); renderDailyInspiration(); };
-renderDailyInspiration(); };
 renderDailyInspiration();
