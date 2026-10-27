@@ -1221,16 +1221,18 @@ renderBudget();
 const inspirationCatalog = [
   { quote:'В середине зимы я наконец понял, что во мне живёт непобедимое лето.', author:'Альбер Камю', title:'Звёздная ночь', artist:'Винсент ван Гог, 1889', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Starry%20Night.jpg?width=1200' },
   { quote:'Нет ничего невозможного для того, кто пробует.', author:'Александр Македонский', title:'Большая волна в Канагава', artist:'Кацусика Хокусай, ок. 1831', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Great%20Wave%20off%20Kanagawa.jpg?width=1200' },
-  { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', image:'https://commons.wikimedia.org/wiki/Special:FilePath/Impression%2C%20Sunrise.jpg?width=1200' },
-  { quote:'Красота спасёт мир.', author:'Фёдор Достоевский', title:'Рождение Венеры', artist:'Сандро Боттичелли, ок. 1485', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Birth%20of%20Venus.jpg?width=1200' }
+  { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', image:'https://commons.wikimedia.org/wiki/Special:FilePath/Monet%20-%20Impression%2C%20Sunrise.jpg?width=1200' },
+  { quote:'Красота спасёт мир.', author:'Фёдор Достоевский', title:'Рождение Венеры', artist:'Сандро Боттичелли, ок. 1485', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Birth%20of%20Venus%20%28Botticelli%29%201.jpg?width=1200' }
 ];
 function dailyInspirationIndex(key) { return [...key].reduce((sum, char) => sum + char.charCodeAt(0), 0) % inspirationCatalog.length; }
 function renderDailyInspiration() {
   const artwork = $('#dailyArtwork'); if (!artwork) return;
   state.inspirationArchive ??= [];
   const key = dateKey(new Date());
+  const dailyArtwork = inspirationCatalog[dailyInspirationIndex(key)];
   let entry = state.inspirationArchive.find(item => item.date === key);
-  if (!entry) { entry = { date:key, ...inspirationCatalog[dailyInspirationIndex(key)] }; state.inspirationArchive.unshift(entry); save(); }
+  if (!entry) { entry = { date:key, ...dailyArtwork }; state.inspirationArchive.unshift(entry); save(); }
+  else if (entry.image !== dailyArtwork.image) { Object.assign(entry, dailyArtwork); save(); }
   $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
   artwork.onerror = () => { artwork.onerror = null; artwork.src = 'assets-central-park-daylight.png'; artwork.alt = `${entry.title} — ${entry.artist}`; }; artwork.src = entry.image; artwork.alt = `${entry.title} — ${entry.artist}`;
   $('#dailyArtworkTitle').textContent = entry.title; $('#dailyArtworkArtist').textContent = entry.artist;
