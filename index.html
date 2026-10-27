@@ -199,8 +199,10 @@
 (() => {
   const surface = document.querySelector('main');
   const mobile = window.matchMedia('(max-width:760px)');
-  const interactive = 'input,textarea,select,button,a,label,summary,[contenteditable]:not([contenteditable="false"]),[role="slider"],audio,video';
+  const tabs = Array.from(document.querySelectorAll('.sidebar .nav-link[data-view]'));
+  const interactive = 'input,textarea,select,label,summary,[contenteditable]:not([contenteditable="false"]),[role="slider"],audio,video';
   let gesture = null;
+  let suppressClickUntil = 0;
   const blocked = target => {
     if (target.closest(interactive) || document.querySelector('dialog[open]')) return true;
     for (let node = target; node && node !== surface; node = node.parentElement) {
@@ -212,9 +214,8 @@
     gesture = null;
     if (!mobile.matches || event.touches.length !== 1 || blocked(event.target) || window.getSelection()?.toString()) return;
     const touch = event.touches[0];
-    // Leave the screen edges available for native browser navigation.
-    if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
-    gesture = { x:touch.clientX, y:touch.clientY, id:touch.identifier, time:performance.now() };
+    if (touch.clientX < 20 || touch.clientX > window.innerWidth - 20) return;
+    gesture = { x:touch.clientX, y:touch.clientY, id:touch.identifier, time:performance.now(), axis:null };
   }, {passive:true});
   surface.addEventListener('touchmove', event => {
     if (!gesture) return;
@@ -222,9 +223,22 @@
     const touch = event.touches[0];
     const dx = Math.abs(touch.clientX - gesture.x);
     const dy = Math.abs(touch.clientY - gesture.y);
-    if (dy > 12 && dy > dx) gesture = null;
-  }, {passive:true});
+    if (!gesture.axis) {
+      if (dy > 12 && dy > dx * 1.2) { gesture = null; return; }
+      if (dx > 10 && dx > dy * 1.2) gesture.axis = 'x';
+    }
+    if (gesture.axis === 'x') {
+      if (event.cancelable) event.preventDefault();
+      suppressClickUntil = performance.now() + 400;
+    }
+  }, {passive:false});
   surface.addEventListener('touchcancel', () => { gesture = null; }, {passive:true});
+  surface.addEventListener('click', event => {
+    if (performance.now() < suppressClickUntil) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
   surface.addEventListener('touchend', event => {
     const start = gesture;
     gesture = null;
@@ -233,13 +247,25 @@
     if (!touch) return;
     const dx = touch.clientX - start.x;
     const dy = touch.clientY - start.y;
-    if (Math.abs(dx) < 64 || Math.abs(dx) < Math.abs(dy) * 1.8 || performance.now() - start.time > 800) return;
-    const tabs = Array.from(document.querySelectorAll('.sidebar .nav-link[data-view]'));
+    const distance = Math.abs(dx);
+    const velocity = distance / Math.max(1, performance.now() - start.time);
+    if (distance < 48 && !(distance >= 24 && velocity >= 0.35)) return;
+    if (!start.axis && distance < Math.abs(dy) * 1.2) return;
     const current = tabs.findIndex(tab => tab.classList.contains('active'));
-    if (current < 0) return;
-    const next = tabs[current + (dx < 0 ? 1 : -1)];
+    const next = current < 0 ? null : tabs[current + (dx < 0 ? 1 : -1)];
     if (!next) return;
-    next.click();
+    suppressClickUntil = performance.now() + 400;
+    // Navigate once, without a synthetic click, hashchange render or smooth scroll.
+    const url = new URL(window.location.href);
+    url.hash = next.dataset.view;
+    history.pushState(null, '', url);
+    activateView(next.dataset.view);
+    window.scrollTo({top:0, behavior:'instant'});
+    const view = document.getElementById(next.dataset.view);
+    view.style.animation = 'none';
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && view.animate) {
+      view.animate([{transform:'translateX(' + (dx < 0 ? 14 : -14) + 'px)',opacity:0.8},{transform:'translateX(0)',opacity:1}], {duration:140,easing:'ease-out'});
+    }
     const menu = next.parentElement;
     const left = next.offsetLeft - menu.offsetLeft;
     if (left < menu.scrollLeft) menu.scrollLeft = left;
