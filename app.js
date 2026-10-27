@@ -535,8 +535,153 @@ $('#budgetForm').addEventListener('submit',e=>{
   state.budget.transactions.push({id:recordedAt.getTime(),createdAt:recordedAt.toISOString(),name:name.value.trim(),amount:Number(amount.value),type,category:transactionCategory.value,currency:$('#transactionCurrency').value,date:$('#transactionDate').value,account:$('#transactionAccount')?.value||'',fromAccount:'',toAccount:''});
   name.value='';amount.value='';transferFrom.value='';transferTo.value='';save();renderBudget();
 });
-function renderHealth(kind){const box=$(kind==='done'?'#healthDone':'#healthTodo'), list=state.health[kind];box.innerHTML=list.length?'':'<p class="empty">Пока ничего. Можно начать с одного маленького пункта.</p>';list.forEach(item=>{const row=document.createElement('div');row.className='health-item';row.innerHTML='<span>✦</span><span></span><button class="archive-action" aria-label="Архивировать заметку">В архив</button><button class="delete" aria-label="Удалить заметку">×</button>';row.querySelectorAll('span')[1].textContent=item.text;row.querySelector('.archive-action').onclick=()=>{archiveRecord({type:'ЗДОРОВЬЕ',text:item.text,source:'health',payload:{kind,item:{...item}}});removeItem(list,item.id);renderHealth(kind)};row.querySelector('.delete').onclick=()=>{removeItem(list,item.id);renderHealth(kind)};box.append(row)});}
-[['done','healthDoneForm','healthDoneInput'],['todo','healthTodoForm','healthTodoInput']].forEach(([kind,form,input])=>{$('#'+form).addEventListener('submit',e=>{e.preventDefault();const field=$('#'+input);if(!field.value.trim())return;state.health[kind].push({id:Date.now(),text:field.value.trim()});field.value='';save();renderHealth(kind)})});
+const HEALTH_FILE_LIMIT = 2 * 1024 * 1024;
+const HEALTH_TOTAL_FILE_LIMIT = 3 * 1024 * 1024;
+let healthDraftFiles = [];
+let healthDraftStatus = 'done';
+let healthEditing = null;
+const healthDateToday = () => dateKey(new Date());
+const healthFileSize = bytes => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} КБ` : `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+function normalizeHealthItem(item) {
+  if (!item || typeof item !== 'object') return { id: Date.now(), text: String(item || ''), date: '', kind: 'Другое', note: '', attachments: [] };
+  item.text ??= '';
+  item.date ??= '';
+  item.kind ??= 'Другое';
+  item.note ??= '';
+  item.attachments = Array.isArray(item.attachments) ? item.attachments : [];
+  return item;
+}
+function normalizeHealthState() {
+  state.health ??= { done: [], todo: [] };
+  state.health.done = (Array.isArray(state.health.done) ? state.health.done : []).map(normalizeHealthItem);
+  state.health.todo = (Array.isArray(state.health.todo) ? state.health.todo : []).map(normalizeHealthItem);
+}
+function renderHealthDraftFiles() {
+  const box = $('#healthFileList');
+  if (!box) return;
+  box.innerHTML = '';
+  healthDraftFiles.forEach((file, index) => {
+    const chip = document.createElement('div');
+    chip.className = 'health-file-chip';
+    chip.innerHTML = '<span>📎</span><strong></strong><small></small><button type="button" aria-label="Убрать прикреплённый файл">×</button>';
+    chip.querySelector('strong').textContent = file.name;
+    chip.querySelector('small').textContent = healthFileSize(file.size);
+    chip.querySelector('button').onclick = () => { healthDraftFiles.splice(index, 1); renderHealthDraftFiles(); };
+    box.append(chip);
+  });
+}
+function resetHealthComposer() {
+  healthEditing = null;
+  healthDraftFiles = [];
+  healthDraftStatus = 'done';
+  $('#healthEntryForm')?.reset();
+  $('#healthDate').value = healthDateToday();
+  $('#healthKind').value = 'Анализ';
+  $('#healthCancelEdit').hidden = true;
+  $('#healthEntryTitle').textContent = 'Добавить без лишнего';
+  $('#healthEntryForm').querySelector('.health-save').textContent = 'Сохранить запись';
+  document.querySelectorAll('[data-health-status]').forEach(button => button.classList.toggle('active', button.dataset.healthStatus === healthDraftStatus));
+  renderHealthDraftFiles();
+}
+function editHealthRecord(kind, item) {
+  healthEditing = { kind, id: item.id };
+  healthDraftStatus = kind;
+  healthDraftFiles = (item.attachments || []).map(file => ({ ...file }));
+  $('#healthDate').value = item.date || healthDateToday();
+  $('#healthKind').value = item.kind || 'Другое';
+  $('#healthTitle').value = item.text || '';
+  $('#healthNote').value = item.note || '';
+  $('#healthCancelEdit').hidden = false;
+  $('#healthEntryTitle').textContent = 'Скорректировать запись';
+  $('#healthEntryForm').querySelector('.health-save').textContent = 'Сохранить изменения';
+  document.querySelectorAll('[data-health-status]').forEach(button => button.classList.toggle('active', button.dataset.healthStatus === healthDraftStatus));
+  renderHealthDraftFiles();
+  $('#healthEntryForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function renderHealthList(kind) {
+  const box = $(kind === 'done' ? '#healthDone' : '#healthTodo');
+  const count = $(kind === 'done' ? '#healthDoneCount' : '#healthTodoCount');
+  const list = state.health[kind];
+  count.textContent = list.length ? `${list.length}` : '';
+  box.innerHTML = list.length ? '' : `<p class="empty">${kind === 'done' ? 'Здесь появятся анализы, визиты и документы.' : 'Добавь то, о чём важно не забыть.'}</p>`;
+  [...list].sort((a,b) => String(b.date || '').localeCompare(String(a.date || ''))).forEach(item => {
+    const row = document.createElement('article');
+    row.className = 'health-record';
+    row.innerHTML = '<div class="health-record-top"><span class="health-record-type"></span><time></time><div class="health-record-actions"><button type="button" class="health-edit">Изменить</button><button type="button" class="archive-action" aria-label="Архивировать запись">В архив</button><button type="button" class="delete" aria-label="Удалить запись">×</button></div></div><h3></h3><p class="health-record-note"></p><div class="health-record-files"></div>';
+    row.querySelector('.health-record-type').textContent = item.kind || 'Запись';
+    row.querySelector('time').textContent = item.date ? new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'short',year:'numeric'}).format(new Date(`${item.date}T12:00:00`)) : 'Без даты';
+    row.querySelector('h3').textContent = item.text;
+    const note = row.querySelector('.health-record-note');
+    note.textContent = item.note || '';
+    note.hidden = !item.note;
+    const files = row.querySelector('.health-record-files');
+    (item.attachments || []).forEach(file => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'health-file-link';
+      button.innerHTML = '<span>📎</span><strong></strong><small></small>';
+      button.querySelector('strong').textContent = file.name;
+      button.querySelector('small').textContent = healthFileSize(file.size || 0);
+      button.onclick = () => file.data ? window.open(file.data, '_blank', 'noopener') : alert('Этот файл был добавлен в старой версии записи. Прикрепи его заново, чтобы открыть.');
+      files.append(button);
+    });
+    row.querySelector('.health-edit').onclick = () => editHealthRecord(kind, item);
+    row.querySelector('.archive-action').onclick = () => {
+      archiveRecord({ type:'ЗДОРОВЬЕ', text:item.text, source:'health', payload:{ kind, item:{ ...item, attachments:(item.attachments || []).map(file => ({...file})) } } });
+      state.health[kind] = state.health[kind].filter(entry => entry.id !== item.id);
+      save(); renderHealth();
+    };
+    row.querySelector('.delete').onclick = () => {
+      state.health[kind] = state.health[kind].filter(entry => entry.id !== item.id);
+      save(); renderHealth();
+    };
+    box.append(row);
+  });
+}
+function renderHealth() {
+  normalizeHealthState();
+  renderHealthList('done');
+  renderHealthList('todo');
+}
+$('#healthEntryForm').addEventListener('submit', event => {
+  event.preventDefault();
+  const text = $('#healthTitle').value.trim();
+  if (!text) { $('#healthTitle').focus(); return; }
+  normalizeHealthState();
+  const record = {
+    id: healthEditing?.id || `health-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    text,
+    date: $('#healthDate').value || healthDateToday(),
+    kind: $('#healthKind').value,
+    note: $('#healthNote').value.trim(),
+    attachments: healthDraftFiles.map(file => ({ ...file }))
+  };
+  if (healthEditing) {
+    state.health[healthEditing.kind] = state.health[healthEditing.kind].filter(item => item.id !== healthEditing.id);
+  }
+  state.health[healthDraftStatus].unshift(record);
+  save(); renderHealth(); resetHealthComposer();
+});
+document.querySelectorAll('[data-health-status]').forEach(button => button.addEventListener('click', () => {
+  healthDraftStatus = button.dataset.healthStatus;
+  document.querySelectorAll('[data-health-status]').forEach(choice => choice.classList.toggle('active', choice === button));
+}));
+$('#healthFiles').addEventListener('change', async event => {
+  const selected = [...event.target.files];
+  let total = healthDraftFiles.reduce((sum, file) => sum + (file.size || 0), 0);
+  const rejected = [];
+  for (const file of selected) {
+    if (file.size > HEALTH_FILE_LIMIT || total + file.size > HEALTH_TOTAL_FILE_LIMIT) { rejected.push(file.name); continue; }
+    const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
+    healthDraftFiles.push({ id:`file-${Date.now()}-${Math.random().toString(16).slice(2)}`, name:file.name, type:file.type, size:file.size, data });
+    total += file.size;
+  }
+  event.target.value = '';
+  $('#healthFileHint').textContent = rejected.length ? `Не добавлено: ${rejected.join(', ')}. Можно до 2 МБ на файл и до 3 МБ всего.` : (healthDraftFiles.length ? 'Готово: файлы прикреплены к этой записи.' : 'Файл будет виден внутри этой записи и сохранится в твоём приватном блокноте.');
+  renderHealthDraftFiles();
+});
+$('#healthCancelEdit').addEventListener('click', resetHealthComposer);
+resetHealthComposer();
+
 $('#askChatGpt').onclick=()=>{const shopping=state.shoppingLists.flatMap(list=>list.items.filter(item=>!item.done).map(item=>`— ${list.name}: ${item.text}`)).join('\n')||'— пока нет';const tasks=state.tasks.filter(t=>!t.done).map(t=>`— ${t.text}`).join('\n')||'— пока нет';const tx=state.budget.transactions;const income=tx.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0),expense=tx.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);const health=state.health.todo.map(x=>`— ${x.text}`).join('\n')||'— пока нет';const context=`Помоги мне мягко спланировать ближайшие дни.\n\nФокус дня: ${state.focus||'ещё не записан'}\n\nДела:\n${tasks}\n\nПокупки:\n${shopping}\n\nБюджет: доходы ${currency(income)}, расходы ${currency(expense)}.\n\nЗапланировать по здоровью:\n${health}\n\nПредложи реалистичный следующий шаг и бережный план без перегруза.`;window.open('https://chatgpt.com/','_blank','noopener');navigator.clipboard?.writeText(context).then(()=>{const label=$('.chatgpt-label');label.textContent='Контекст скопирован';setTimeout(()=>label.textContent='Спросить ChatGPT',1800)}).catch(()=>{});};
 // Legacy tasks stay in saved data but are not auto-created on the start page.
 renderTasks();
