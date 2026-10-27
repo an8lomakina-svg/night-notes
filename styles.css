@@ -732,3 +732,63 @@ body.night .film-location span { color:#965e2f; }
 .daily-inspiration figcaption { display:flex; flex-direction:column; justify-content:center; padding:38px 34px; background:linear-gradient(145deg,#fffaf1,#f5e5cf); }.daily-inspiration figcaption .eyebrow { margin:0 0 7px; }.art-artist { margin:0; color:#806b59; font:12px/1.4 "Space Grotesk",sans-serif; }.daily-inspiration blockquote { margin:42px 0 13px; color:#493125; font:500 clamp(22px,2.5vw,31px)/1.16 "Playfair Display",serif; letter-spacing:-.04em; }.quote-author { margin:0; color:#a85e2c; font:10px "DM Mono",monospace; letter-spacing:.05em; }
 .inspiration-history { margin-top:18px; border-top:1px solid rgba(91,61,38,.16); }.inspiration-history summary { padding:15px 0; color:#8b5c3c; cursor:pointer; font:10px "DM Mono",monospace; letter-spacing:.08em; text-transform:uppercase; }.inspiration-archive { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:0 0 20px; }.inspiration-archive article { padding:12px; border-left:2px solid #d8a46f; background:rgba(255,253,248,.66); }.inspiration-archive time,.inspiration-archive small { color:#9d8471; font:9px "DM Mono",monospace; }.inspiration-archive p { margin:8px 0; color:#50382a; font:italic 15px/1.3 "Playfair Display",serif; }
 @media (max-width:760px) { .daily-inspiration { padding-top:34px; }.daily-inspiration>header { align-items:start; flex-direction:column; gap:10px; margin-bottom:20px; }.daily-inspiration header .mono { padding:0; }.daily-inspiration figure { grid-template-columns:1fr; }.daily-art-frame { min-height:300px; }.daily-inspiration figcaption { padding:26px 22px 29px; }.daily-inspiration blockquote { margin-top:27px; }.inspiration-archive { grid-template-columns:1fr; } }
+
+
+/* Health: calm record composer */
+.health-heading { padding-bottom:30px; }
+.health-intro { max-width:510px; margin:22px 0 0; color:#765a46; font-size:15px; line-height:1.55; }
+.health-capture { padding:26px; background:linear-gradient(135deg,#fffdf8,rgba(237,193,141,.34)); }
+.health-capture .utility-heading { align-items:center; }
+.health-entry-form { margin-top:22px; }
+.health-status-switch { display:flex; width:max-content; max-width:100%; gap:5px; padding:4px; border:1px solid rgba(91,61,38,.17); border-radius:999px; background:rgba(255,255,255,.55); }
+.health-status-choice { min-height:38px; padding:8px 14px; border:0; border-radius:999px; background:transparent; color:#765a46; font-size:12px; }
+.health-status-choice.active { background:#c87532; color:#fffaf2; box-shadow:0 2px 7px rgba(112,66,30,.16); }
+.health-fields { display:grid; grid-template-columns:145px 165px minmax(180px,1fr); gap:10px; margin-top:18px; }
+.health-fields label,.health-note-label { display:grid; gap:6px; color:#765a46; font:10px "DM Mono",monospace; letter-spacing:.06em; text-transform:uppercase; }
+.health-fields input,.health-fields select,.health-note-label textarea { width:100%; min-height:44px; padding:10px 11px; border:1px solid rgba(91,61,38,.22); border-radius:2px; outline:0; background:rgba(255,253,248,.82); color:#493125; font:13px "Space Grotesk",sans-serif; letter-spacing:normal; text-transform:none; }
+.health-note-label { margin-top:12px; }
+.health-note-label textarea { min-height:82px; resize:vertical; line-height:1.45; }
+.health-fields input:focus,.health-fields select:focus,.health-note-label textarea:focus { border-color:#c87532; box-shadow:0 0 0 3px rgba(200,117,50,.1); }
+.health-attachment-area { margin-top:14px; padding:13px; border:1px dashed rgba(91,61,38,.26); background:rgba(255,255,255,.42); }
+.health-upload { display:grid; grid-template-columns:30px auto; column-gap:9px; align-items:center; width:max-content; max-width:100%; color:#70462d; cursor:pointer; }
+.health-upload span { grid-row:span 2; display:grid; place-items:center; width:28px; height:28px; border-radius:50%; background:#f1d1a5; color:#8b5026; font-size:20px; }
+.health-upload strong { font-size:13px; font-weight:500; }
+.health-upload small { color:#8e705b; font-size:10px; }
+.health-file-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(185px,1fr)); gap:7px; margin-top:11px; }
+.health-file-chip { display:grid; grid-template-columns:auto minmax(0,1fr) auto auto; gap:6px; align-items:center; padding:7px 8px; background:#fffaf2; border:1px solid rgba(91,61,38,.13); }
+.health-file-chip strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; font-weight:500; }
+.health-file-chip small { color:#8e705b; font:9px "DM Mono",monospace; }
+.health-file-chip button { border:0; background:transparent; color:#9d8471; font-size:17px; line-height:1; }
+.health-form-footer { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-top:14px; }
+.health-file-hint { margin:0; color:#8e705b; font-size:11px; line-height:1.4; }
+.health-save { min-height:42px; padding:0 17px; border:0; background:#c87532; color:#fffaf2; font-weight:600; white-space:nowrap; }
+.health-sections { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:20px; }
+.health-lane { padding:22px; }
+.health-count { display:grid; place-items:center; min-width:24px; height:24px; border-radius:50%; background:#f1d1a5; color:#70462d; font:10px "DM Mono",monospace; }
+.health-record-list { margin-top:17px; }
+.health-record { padding:14px 0; border-bottom:1px solid var(--line); }
+.health-record:last-child { border-bottom:0; }
+.health-record-top { display:flex; align-items:center; gap:8px; }
+.health-record-type { color:#a15d2b; font:9px "DM Mono",monospace; letter-spacing:.06em; text-transform:uppercase; }
+.health-record time { color:#8e705b; font:9px "DM Mono",monospace; }
+.health-record-actions { display:flex; align-items:center; gap:5px; margin-left:auto; }
+.health-record-actions button { min-height:27px; border:0; background:transparent; color:#8e705b; font-size:10px; }
+.health-record-actions .health-edit { color:#a15d2b; }
+.health-record h3 { margin:8px 0 0; color:#493125; font:500 17px/1.2 "Playfair Display",serif; }
+.health-record-note { margin:7px 0 0; color:#765a46; font-size:12px; line-height:1.45; white-space:pre-wrap; }
+.health-record-files { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.health-file-link { display:flex; align-items:center; gap:5px; max-width:100%; padding:6px 8px; border:1px solid rgba(91,61,38,.16); background:#fffaf2; color:#70462d; }
+.health-file-link strong { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; font-weight:500; }
+.health-file-link small { color:#8e705b; font:9px "DM Mono",monospace; }
+@media (max-width:760px) {
+  .health-heading { padding-top:44px; }
+  .health-capture,.health-lane { padding:17px; }
+  .health-status-switch { width:100%; }
+  .health-status-choice { flex:1; padding-inline:8px; font-size:11px; }
+  .health-fields,.health-sections { grid-template-columns:1fr; }
+  .health-fields { gap:11px; }
+  .health-form-footer { align-items:stretch; flex-direction:column; }
+  .health-save { width:100%; }
+  .health-record-top { align-items:flex-start; flex-wrap:wrap; }
+  .health-record-actions { width:100%; margin-left:0; justify-content:flex-end; }
+}
