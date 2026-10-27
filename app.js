@@ -581,7 +581,8 @@ function resetHealthComposer(close = true) {
   $('#healthEntryForm')?.reset();
   $('#healthDate').value = healthDateToday();
   $('#healthKind').value = 'Анализ';
-  $('#healthCancelEdit').hidden = true;
+  $('#healthCancelEdit').hidden = close;
+  $('#healthCancelEdit').textContent = 'Назад';
   $('#healthEntryTitle').textContent = 'Добавить без лишнего';
   $('#healthEntryForm').querySelector('.health-save').textContent = 'Сохранить запись';
   document.querySelectorAll('[data-health-status]').forEach(button => button.classList.toggle('active', button.dataset.healthStatus === healthDraftStatus));
@@ -598,6 +599,7 @@ function editHealthRecord(kind, item) {
   $('#healthNote').value = item.note || '';
   setHealthComposerOpen(true);
   $('#healthCancelEdit').hidden = false;
+  $('#healthCancelEdit').textContent = 'Отменить редактирование';
   $('#healthEntryTitle').textContent = 'Скорректировать запись';
   $('#healthEntryForm').querySelector('.health-save').textContent = 'Сохранить изменения';
   document.querySelectorAll('[data-health-status]').forEach(button => button.classList.toggle('active', button.dataset.healthStatus === healthDraftStatus));
