@@ -529,13 +529,66 @@ function refreshTransactionForm(){
 }
 transactionType.onchange=refreshTransactionForm;
 refreshTransactionForm();
-$('#budgetForm').addEventListener('submit',e=>{
+const budgetForm = $('#budgetForm');
+const budgetSubmit = budgetForm.querySelector('button[type="submit"]');
+const budgetFeedback = document.createElement('p');
+budgetFeedback.id = 'budgetFormFeedback';
+budgetFeedback.className = 'budget-form-feedback';
+budgetFeedback.setAttribute('role', 'status');
+budgetFeedback.setAttribute('aria-live', 'polite');
+budgetForm.append(budgetFeedback);
+budgetForm.noValidate = true;
+const budgetPrimaryFields = ['transactionName', 'transactionAmount', 'transactionDate', 'transactionCategory'];
+budgetPrimaryFields.forEach(id => {
+  const field = $('#' + id);
+  field.setAttribute('aria-describedby', 'budgetFormFeedback');
+  field.addEventListener('input', () => field.removeAttribute('aria-invalid'));
+  field.addEventListener('change', () => field.removeAttribute('aria-invalid'));
+});
+budgetForm.addEventListener('input', () => { budgetFeedback.textContent = ''; });
+budgetForm.addEventListener('change', () => { budgetFeedback.textContent = ''; });
+// Keep the keyboard from moving the button between touch-down and click.
+budgetSubmit.addEventListener('pointerdown', event => {
+  const active = document.activeElement;
+  if (event.pointerType === 'touch' && active && budgetForm.contains(active) && active.matches('input,textarea,select')) event.preventDefault();
+});
+budgetForm.addEventListener('submit', e => {
   e.preventDefault();
-  const name=$('#transactionName'), amount=$('#transactionAmount'), type=transactionType.value;
-  if(!name.value.trim()||!Number(amount.value)||!transactionCategory.value)return;
+  const name = $('#transactionName'), amount = $('#transactionAmount'), date = $('#transactionDate');
+  const comment = $('#transactionComment');
+  const type = transactionType.value;
+  const amountValue = Number(amount.value);
+  budgetPrimaryFields.forEach(id => $('#' + id).removeAttribute('aria-invalid'));
+  const invalid = !name.value.trim() ? [name, 'Введите название операции.']
+    : !amount.value || !Number.isFinite(amountValue) || amountValue <= 0 || !amount.validity.valid ? [amount, 'Введите сумму больше нуля, не более двух знаков после запятой.']
+    : !date.value || !date.validity.valid ? [date, 'Укажите дату операции.']
+    : !(type === 'income' ? incomeCategories : expenseCategories).includes(transactionCategory.value) ? [transactionCategory, 'Выберите категорию операции.']
+    : null;
+  if (invalid) {
+    invalid[0].setAttribute('aria-invalid', 'true');
+    budgetFeedback.dataset.state = 'error';
+    budgetFeedback.textContent = invalid[1];
+    return;
+  }
   const recordedAt = new Date();
-  state.budget.transactions.push({id:recordedAt.getTime(),createdAt:recordedAt.toISOString(),name:name.value.trim(),amount:Number(amount.value),type,category:transactionCategory.value,currency:$('#transactionCurrency').value,date:$('#transactionDate').value,account:$('#transactionAccount')?.value||'',fromAccount:'',toAccount:''});
-  name.value='';amount.value='';transferFrom.value='';transferTo.value='';save();renderBudget();
+  const item = {id:recordedAt.getTime(),createdAt:recordedAt.toISOString(),name:name.value.trim(),amount:amountValue,type,category:transactionCategory.value,currency:$('#transactionCurrency').value,date:date.value,account:$('#transactionAccount')?.value||'',fromAccount:'',toAccount:'',comment:comment.value.trim()};
+  state.budget.transactions.push(item);
+  try {
+    save();
+  } catch (error) {
+    state.budget.transactions = state.budget.transactions.filter(entry => entry !== item);
+    budgetFeedback.dataset.state = 'error';
+    budgetFeedback.textContent = 'Не удалось сохранить. Данные остались в форме — попробуйте ещё раз.';
+    return;
+  }
+  name.value = '';
+  amount.value = '';
+  comment.value = '';
+  transferFrom.value = transferTo.value = '';
+  amount.dispatchEvent(new Event('input', {bubbles:true}));
+  renderBudget();
+  budgetFeedback.dataset.state = 'success';
+  budgetFeedback.textContent = 'Добавлено: ' + item.name + ' · ' + currency(item.amount, item.currency);
 });
 const HEALTH_FILE_LIMIT = 1 * 1024 * 1024;
 const HEALTH_TOTAL_FILE_LIMIT = Math.floor(1.5 * 1024 * 1024);
@@ -731,9 +784,7 @@ budgetCommentStyles.textContent=`.budget-form textarea{grid-column:span 2;paddin
 document.head.append(budgetCommentStyles);
 const renderBudgetBase=renderBudget;
 renderBudget=()=>{renderBudgetBase();const entries=budgetEntriesByDate();document.querySelectorAll('#transactionList .transaction').forEach((row,index)=>{const item=entries[index],copy=row.querySelector('div');copy.classList.add('transaction-copy');const comment=document.createElement('p'),action=document.createElement('button'),editor=document.createElement('textarea'),saveComment=document.createElement('button');comment.className='transaction-comment';comment.textContent=item.comment||'';comment.hidden=!item.comment;action.className='comment-action';action.type='button';action.textContent=item.comment?'Изменить комментарий':'+ Комментарий';editor.className='comment-editor';editor.rows=2;editor.value=item.comment||'';editor.setAttribute('aria-label','Комментарий к операции');saveComment.className='comment-save';saveComment.type='button';saveComment.textContent='Сохранить';action.onclick=()=>{row.classList.toggle('is-editing');if(row.classList.contains('is-editing'))editor.focus()};saveComment.onclick=()=>{item.comment=editor.value.trim();save();renderBudget()};copy.append(comment,action,editor,saveComment)})};
-let budgetCommentDraft=null;
-$('#budgetForm').addEventListener('submit',()=>{const name=$('#transactionName').value.trim(),amount=Number($('#transactionAmount').value);budgetCommentDraft=name&&amount?$('#transactionComment').value.trim():null},true);
-$('#budgetForm').addEventListener('submit',()=>{if(budgetCommentDraft===null)return;const item=state.budget.transactions.at(-1);if(item&&budgetCommentDraft)item.comment=budgetCommentDraft;budgetCommentDraft=null;$('#transactionComment').value='';save();renderBudget()});
+
 renderBudget();
 
 const renderBudgetWithEmptyState = renderBudget;
@@ -1193,8 +1244,7 @@ function mountBudgetJourney() {
       typeSelect.value = type;
       typeSelect.dispatchEvent(new Event('change'));
       quick.querySelectorAll('.budget-quick-action').forEach(item => item.classList.toggle('is-active', item === button));
-      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      nameInput?.focus({ preventScroll: true });
+      if (window.matchMedia('(pointer:fine)').matches) nameInput?.focus({ preventScroll: true });
     });
   });
 
@@ -1285,7 +1335,7 @@ function mountBudgetAccounts() {
     label.hidden = !label.hidden;
     toggle.classList.toggle('is-open', !label.hidden);
     toggle.textContent = label.hidden ? '＋ счёт' : '− счёт';
-    if (!label.hidden) select.focus();
+    if (!label.hidden && window.matchMedia('(pointer:fine)').matches) select.focus({preventScroll:true});
   };
   select.onchange = () => {
     const account = accountById(select.value);
@@ -1321,7 +1371,7 @@ function mountBudgetConverter() {
     const foreignCurrency = currencySelect.value !== 'RSD';
     const hasAmount = Number.isFinite(value) && value > 0;
     const canConvert = foreignCurrency && hasAmount && Number.isFinite(rateValue) && rateValue > 0;
-    converter.hidden = !(foreignCurrency && hasAmount);
+    converter.hidden = !foreignCurrency;
     rateLabel.textContent = `Курс ${currencySelect.value} → RSD`;
     preview.textContent = canConvert
       ? `${amountFormatter.format(value)} ${currencySelect.value} = ${amountFormatter.format(value * rateValue)} RSD`
@@ -1338,7 +1388,7 @@ function mountBudgetConverter() {
     amount.value = String(Math.round(value * rateValue * 100) / 100);
     currencySelect.value = 'RSD';
     refresh();
-    amount.focus();
+    if (window.matchMedia('(pointer:fine)').matches) amount.focus({preventScroll:true});
   });
   refresh();
 }
