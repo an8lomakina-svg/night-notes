@@ -57,6 +57,7 @@ state.plans.done ??= [];
 state.events ??= {};
 state.imports ??= [];
 state.archive ??= [];
+state.hiddenGoogleEvents ??= [];
 state.selfCareDaily ??= {};
 const SYNC_CONFIG = { url: 'https://ucwiohxqtmdzlsboveie.supabase.co', key: 'sb_publishable_MACL1sYFp5rUQAkB26M4kQ_Bys6WsD1' };
 let cloudClient = null, cloudUser = null, cloudSyncTimer = null, cloudHydrating = false;
@@ -339,7 +340,7 @@ function loadGoogleIdentity() {
   });
 }
 function allEvents(key) { return [
-  ...(state.events[key] || []).map((event, index) => ({ ...event, source: event.googleId ? 'google' : 'local', index })),
+  ...(state.events[key] || []).filter(event => !event.googleId || !state.hiddenGoogleEvents.includes(event.googleId)).map((event, index) => ({ ...event, source: event.googleId ? 'google' : 'local', index })),
   ...state.imports.map((event, index) => event.date === key ? { ...event, source: 'import', index } : null).filter(Boolean)
 ] }
 function renderCalendar(){ const y=month.getFullYear(),m=month.getMonth();$('#monthTitle').textContent=new Intl.DateTimeFormat('ru-RU',{month:'long',year:'numeric'}).format(month);const grid=$('#calendarGrid');grid.innerHTML=''; const start=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(); for(let i=0;i<start;i++){let e=document.createElement('span');e.className='day empty';grid.append(e)} for(let d=1;d<=days;d++){const date=new Date(y,m,d),k=dateKey(date),count=allEvents(k).length,b=document.createElement('button');b.className='day'+(dateKey(new Date())===k?' today':'')+(dateKey(selectedDate)===k?' selected':'')+(count?' has-event':'');b.textContent=d;b.setAttribute('aria-label',`${niceDate(date)}${count ? `, событий: ${count}` : ''}`);b.onclick=()=>{selectedDate=date;renderCalendar();renderAgenda()};grid.append(b)} renderAgenda();}
@@ -376,7 +377,20 @@ async function deleteCalendarEvent(event, date) {
     renderCalendar();
   } catch (error) { showGoogleError(error); }
 }
-function renderAgenda(){const k=dateKey(selectedDate), events=allEvents(k);$('#agendaLabel').textContent=niceDate(selectedDate).toUpperCase();$('#agendaTitle').textContent=dateKey(selectedDate)===dateKey(new Date())?'Сегодня':'На этот день';const box=$('#agendaItems');box.innerHTML=events.length?'':'<p class="empty">Пока здесь свободно. В этом тоже есть свой ритм.</p>';events.forEach(e=>{const x=document.createElement('div');x.className='event';x.innerHTML=`<span class="event-time">${e.time||'ВЕСЬ ДЕНЬ'}</span><span class="event-title"></span><span class="event-actions"><button class="event-edit" type="button">Изменить</button>${e.googleId ? '<span class="event-source">Google</span>' : e.source === 'local' ? '<button class="archive-action" type="button" aria-label="Архивировать событие">↙</button>' : ''}<button class="delete" type="button" aria-label="Удалить событие">×</button></span>`;x.querySelector('.event-title').textContent=e.title;x.querySelector('.event-edit').onclick=()=>updateCalendarEvent(e,k);const archive=x.querySelector('.archive-action');if(archive)archive.onclick=()=>{archiveRecord({type:'СОБЫТИЕ',text:e.title,source:'event',payload:{date:k,time:e.time||'ВЕСЬ ДЕНЬ',title:e.title}});removeNotebookEvent(k,e.index);save();renderCalendar()};x.querySelector('.delete').onclick=()=>deleteCalendarEvent(e,k);box.append(x)})}
+function archiveCalendarEvent(event, date) {
+  if (event.source === 'google') {
+    archiveRecord({ type:'СОБЫТИЕ GOOGLE', text:event.title, source:'google-event', payload:{ googleId:event.googleId } });
+    state.hiddenGoogleEvents.push(event.googleId);
+  } else if (event.source === 'import') {
+    archiveRecord({ type:'СОБЫТИЕ', text:event.title, source:'calendar-import', payload:{ item:{ ...state.imports[event.index] } } });
+    state.imports.splice(event.index, 1);
+  } else {
+    archiveRecord({ type:'СОБЫТИЕ', text:event.title, source:'event', payload:{ date, time:event.time || 'ВЕСЬ ДЕНЬ', title:event.title } });
+    removeNotebookEvent(date, event.index);
+  }
+  save(); renderCalendar();
+}
+function renderAgenda(){const k=dateKey(selectedDate), events=allEvents(k);$('#agendaLabel').textContent=niceDate(selectedDate).toUpperCase();$('#agendaTitle').textContent=dateKey(selectedDate)===dateKey(new Date())?'Сегодня':'На этот день';const box=$('#agendaItems');box.innerHTML=events.length?'':'<p class="empty">Пока здесь свободно. В этом тоже есть свой ритм.</p>';events.forEach(e=>{const x=document.createElement('div');x.className='event';x.innerHTML=`<span class="event-time">${e.time||'ВЕСЬ ДЕНЬ'}</span><span class="event-title"></span><span class="event-actions"><button class="event-edit" type="button">Изменить</button>${e.googleId ? '<span class="event-source">Google</span>' : ''}<button class="archive-action" type="button" aria-label="Архивировать событие">В архив</button><button class="delete" type="button" aria-label="Удалить событие">×</button></span>`;x.querySelector('.event-title').textContent=e.title;x.querySelector('.event-edit').onclick=()=>updateCalendarEvent(e,k);x.querySelector('.archive-action').onclick=()=>archiveCalendarEvent(e,k);x.querySelector('.delete').onclick=()=>deleteCalendarEvent(e,k);box.append(x)})}
 $('#prevMonth').onclick=()=>{month.setMonth(month.getMonth()-1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#nextMonth').onclick=()=>{month.setMonth(month.getMonth()+1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#calendarToday').onclick=()=>{selectedDate=new Date();selectedDate.setHours(0,0,0,0);month=new Date(selectedDate);renderCalendar();refreshGoogleEvents().catch(showGoogleError)}; $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const x=$('#eventInput'),time=$('#eventTime');if(!x.value.trim())return;const k=dateKey(selectedDate);const event={title:x.value.trim(),time:time.value||'ВЕСЬ ДЕНЬ'};try{if(isGoogleConnected()){const created=await googleApi('/calendars/primary/events',{method:'POST',body:JSON.stringify(googleEventPayload(event.title,k,event.time))});event.googleId=created.id;event.googleUpdated=created.updated||new Date().toISOString()}(state.events[k]??=[]).push(event);x.value='';time.value='';save();await refreshGoogleEvents();renderCalendar()}catch(error){showGoogleError(error)}});
 connectGoogleCalendar?.addEventListener('click', async () => {
   const clientId = clientIdInput?.value.trim();
@@ -404,7 +418,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refreshGoogleEvents().catch(showGoogleError);
 });
 $('#importCalendar').onclick=()=>$('#icsInput').click();$('#icsInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;const raw=await f.text();let added=0;raw.split('BEGIN:VEVENT').slice(1).forEach(block=>{const val=(name)=>block.match(new RegExp(name+'(?:;[^:]*)?:(.+)'))?.[1]?.trim();const dt=val('DTSTART'),title=val('SUMMARY');if(dt&&title){const date=`${dt.slice(0,4)}-${dt.slice(4,6)}-${dt.slice(6,8)}`;const time=dt.includes('T')?`${dt.slice(9,11)}:${dt.slice(11,13)}`:'ВЕСЬ ДЕНЬ';state.imports.push({date,title,time});added++}});save();renderCalendar();alert(`Импортировано событий: ${added}`);e.target.value=''};
-function restoreArchive(entry){const payload=entry.payload||{};if(entry.source==='task')state.tasks.push(payload);if(entry.source==='plan')state.plans[payload.key].push(payload.text);if(entry.source==='focus'){state.focus=payload.text||entry.text;$('#focusInput').value=state.focus}if(entry.source==='event'){(state.events[payload.date]??=[]).push({title:payload.title,time:payload.time})}if(entry.source==='shopping-item'){const list=state.shoppingLists.find(x=>x.id===payload.listId)||{id:payload.listId||Date.now(),name:payload.listName||'Мой список',items:[]};if(!state.shoppingLists.includes(list))state.shoppingLists.push(list);list.items.push(payload.item)}if(entry.source==='shopping-list'){state.shoppingLists.push(payload.list)}if(entry.source==='budget')state.budget.transactions.push(payload.item);if(entry.source==='health')state.health[payload.kind].push(payload.item);state.archive=state.archive.filter(x=>x.id!==entry.id);save();renderTasks();renderPlans();renderCalendar();renderShopping();renderBudget();renderHealth('done');renderHealth('todo')}
+function restoreArchive(entry){const payload=entry.payload||{};if(entry.source==='task')state.tasks.push(payload);if(entry.source==='plan')state.plans[payload.key].push(payload.text);if(entry.source==='focus'){state.focus=payload.text||entry.text;$('#focusInput').value=state.focus}if(entry.source==='event'){(state.events[payload.date]??=[]).push({title:payload.title,time:payload.time})}if(entry.source==='google-event')state.hiddenGoogleEvents=state.hiddenGoogleEvents.filter(id=>id!==payload.googleId);if(entry.source==='calendar-import')state.imports.push(payload.item);if(entry.source==='shopping-item'){const list=state.shoppingLists.find(x=>x.id===payload.listId)||{id:payload.listId||Date.now(),name:payload.listName||'Мой список',items:[]};if(!state.shoppingLists.includes(list))state.shoppingLists.push(list);list.items.push(payload.item)}if(entry.source==='shopping-list'){state.shoppingLists.push(payload.list)}if(entry.source==='budget')state.budget.transactions.push(payload.item);if(entry.source==='health')state.health[payload.kind].push(payload.item);state.archive=state.archive.filter(x=>x.id!==entry.id);save();renderTasks();renderPlans();renderCalendar();renderShopping();renderBudget();renderHealth('done');renderHealth('todo')}
 function renderArchive(){const entries=state.archive;const b=$('#archiveList');b.innerHTML=entries.length?'':'<p class="empty">Здесь появятся записи, которые ты отправишь в архив.</p>';entries.forEach(entry=>{const el=document.createElement('article');el.className='archive-entry';const date=entry.archivedAt?new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'short'}).format(new Date(entry.archivedAt)).toUpperCase():'АРХИВ';el.innerHTML=`<time>${entry.type} · ${date}</time><p></p><div class="archive-actions"><button class="restore-action" type="button">Вернуть</button><button class="delete" type="button" aria-label="Удалить запись из архива">×</button></div>`;el.querySelector('p').textContent=entry.text;el.querySelector('.restore-action').onclick=()=>restoreArchive(entry);el.querySelector('.delete').onclick=()=>{state.archive=state.archive.filter(x=>x.id!==entry.id);save()};b.append(el)})} renderArchive();
 const setHint=(x)=>{const h=$('#voiceHint');h.hidden=!x;h.textContent=x}; const SR=window.SpeechRecognition||window.webkitSpeechRecognition; $('#voiceTask').onclick=async()=>{if(!window.isSecureContext){setHint('Голосовой ввод работает в опубликованном блокноте по HTTPS — открой ссылку GitHub Pages.');return}if(!SR){setHint('Этот браузер не поддерживает голосовой ввод. Открой блокнот в Chrome или Safari и нажми значок микрофона в поле.');return}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(track=>track.stop())}catch{setHint('Разреши доступ к микрофону для этого сайта — затем нажми кнопку ещё раз.');return}const r=new SR();r.lang='ru-RU';r.interimResults=false;r.maxAlternatives=1;$('#voiceTask').classList.add('listening');setHint('Слушаю… скажи задачу.');r.start();r.onresult=e=>{$('#taskInput').value=e.results[0][0].transcript;setHint('Готово — можно добавить задачy кнопкой +.');};r.onerror=e=>setHint(e.error==='not-allowed'?'Разреши микрофон для этого сайта и попробуй ещё раз.':'Не удалось распознать речь. Попробуй ещё раз.');r.onend=()=>$('#voiceTask').classList.remove('listening')};
 function speak(text){if(!('speechSynthesis'in window)||!text.trim())return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='ru-RU';u.rate=.93;window.speechSynthesis.speak(u)} $('#listenFocus').onclick=()=>speak(state.focus||'Пока фокус дня не записан.');$('#soundToggle').onclick=()=>speak(state.focus||'Добро пожаловать в Night Notes.');const themeToggle=$('#themeToggle');const syncThemeToggle=()=>{const dimmed=document.body.classList.contains('night');themeToggle.setAttribute('aria-pressed',String(dimmed));themeToggle.setAttribute('aria-label',dimmed?'Включить яркий свет':'Приглушить свет');themeToggle.textContent=dimmed?'◑ включить яркий свет':'◐ приглушить свет'};themeToggle.onclick=()=>{document.body.classList.toggle('night');syncThemeToggle()};syncThemeToggle();
@@ -1047,7 +1061,7 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=43')) budgetStylesheet.href = 'styles.css?v=43&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=44')) budgetStylesheet.href = 'styles.css?v=44&journey=1';
 mountBudgetJourney();
 renderBudget();
 
@@ -1129,4 +1143,20 @@ function mountBudgetConverter() {
   refresh();
 }
 mountBudgetConverter();
+
+// Make the reversible archive action explicit everywhere a record can be moved.
+function labelArchiveActions(root = document) {
+  root.querySelectorAll('.archive-action').forEach(button => { button.textContent = 'В архив'; });
+}
+const renderTasksWithArchiveLabels = renderTasks;
+renderTasks = () => { renderTasksWithArchiveLabels(); labelArchiveActions($('#taskList')); };
+const renderPlansWithArchiveLabels = renderPlans;
+renderPlans = () => { renderPlansWithArchiveLabels(); labelArchiveActions($('#plans')); };
+const renderShoppingWithArchiveLabels = renderShopping;
+renderShopping = () => { renderShoppingWithArchiveLabels(); labelArchiveActions($('#shopping')); };
+const renderHealthWithArchiveLabels = renderHealth;
+renderHealth = kind => { renderHealthWithArchiveLabels(kind); labelArchiveActions(kind === 'done' ? $('#healthDone') : $('#healthTodo')); };
+const renderBudgetWithArchiveLabels = renderBudget;
+renderBudget = () => { renderBudgetWithArchiveLabels(); labelArchiveActions($('#budget')); };
+renderTasks(); renderPlans(); renderShopping(); renderHealth('done'); renderHealth('todo'); renderBudget();
 
