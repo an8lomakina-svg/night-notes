@@ -495,15 +495,17 @@ const budgetEntryCreatedAt = item => {
   const legacyId = Number(item.id);
   return Number.isFinite(legacyId) && legacyId > 946684800000 ? legacyId : null;
 };
+let budgetDateOrder = 'newest';
+try { budgetDateOrder = localStorage.getItem('night-notes-budget-date-order') === 'oldest' ? 'oldest' : 'newest'; } catch {}
 const budgetEntriesByDate = (entries = state.budget.transactions) => [...entries].sort((left, right) => {
-  const timestamp = item => {
-    const value = Date.parse(`${item.date || ''}T12:00:00`);
-    return Number.isFinite(value) ? value : Infinity;
-  };
-  const byDate = timestamp(left) - timestamp(right);
-  if (byDate) return byDate;
+  const direction = budgetDateOrder === 'oldest' ? 1 : -1;
+  const timestamp = item => Date.parse(`${item.date || ''}T12:00:00`);
+  const leftDate = timestamp(left), rightDate = timestamp(right);
+  // Undated operations stay at the bottom in either direction.
+  if (Number.isFinite(leftDate) !== Number.isFinite(rightDate)) return Number.isFinite(leftDate) ? -1 : 1;
+  if (Number.isFinite(leftDate) && leftDate !== rightDate) return (leftDate - rightDate) * direction;
   const leftCreated = budgetEntryCreatedAt(left), rightCreated = budgetEntryCreatedAt(right);
-  if (leftCreated !== null && rightCreated !== null) return leftCreated - rightCreated;
+  if (leftCreated !== null && rightCreated !== null) return (leftCreated - rightCreated) * direction;
   return 0;
 });
 function renderBudget(){ const tx=state.budget.transactions;const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts={};filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${key}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction';row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="archive-action" aria-label="Архивировать запись">В архив</button><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${item.fromAccount} → ${item.toAccount} · `:'';row.querySelector('small').textContent=`${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.archive-action').onclick=()=>{archiveRecord({type:item.type==='income'?'ДОХОД':item.type==='transfer'?'ПЕРЕВОД':'РАСХОД',text:`${item.name} · ${currency(item.amount,code(item))}`,source:'budget',payload:{item:{...item}}});state.budget.transactions=state.budget.transactions.filter(x=>x.id!==item.id);save();renderBudget()};row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
@@ -1150,8 +1152,14 @@ function mountBudgetJourney() {
   list.before(ledgerHead);
   const tools = document.createElement('div');
   tools.className = 'budget-ledger-tools';
-  tools.innerHTML = '<select id="budgetLedgerFilter" aria-label="Показать операции"><option value="all">Все операции</option><option value="expense">Только расходы</option><option value="income">Только доходы</option><option value="transfer">Только переводы</option></select><input id="budgetLedgerSearch" type="search" placeholder="Найти в журнале…" aria-label="Поиск по операциям" />';
+  tools.innerHTML = '<select id="budgetLedgerFilter" aria-label="Показать операции"><option value="all">Все операции</option><option value="expense">Только расходы</option><option value="income">Только доходы</option><option value="transfer">Только переводы</option></select><select id="budgetDateOrder" aria-label="Порядок операций по дате"><option value="newest">Сначала новые</option><option value="oldest">Сначала старые</option></select><input id="budgetLedgerSearch" style="grid-column:1 / -1" type="search" placeholder="Найти в журнале…" aria-label="Поиск по операциям" />';
   list.before(tools);
+  $('#budgetDateOrder').value = budgetDateOrder;
+  $('#budgetDateOrder').addEventListener('change', event => {
+    budgetDateOrder = event.target.value === 'oldest' ? 'oldest' : 'newest';
+    try { localStorage.setItem('night-notes-budget-date-order', budgetDateOrder); } catch {}
+    renderBudget();
+  });
 
   const chartWrap = section.querySelector('.chart-wrap');
   const chartEmpty = document.createElement('p');
