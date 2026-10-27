@@ -105,7 +105,7 @@ function setSyncStatus(message, synced = false) { const button = $('#syncAccount
 function queueCloudSave() {
   if (!cloudClient || !cloudUser || cloudHydrating) return;
   clearTimeout(cloudSyncTimer);
-  cloudSyncTimer = setTimeout(() => { cloudSyncTimer = null; pushCloudState(); }, 300);
+  cloudSyncTimer = setTimeout(() => { cloudSyncTimer = null; if (cloudUser && hasPendingSync('user:' + cloudUser.id)) pushCloudState(); }, 300);
 }
 async function pushCloudState() {
   if (!cloudClient || !cloudUser || cloudHydrating) return false;
@@ -177,7 +177,7 @@ async function ensureSharedSync() {
 function queueSharedSave() {
   if (!cloudClient || !sharedSync || sharedHydrating || cloudUser) return;
   clearTimeout(sharedSyncTimer);
-  sharedSyncTimer = setTimeout(() => { sharedSyncTimer = null; pushSharedState(); }, 300);
+  sharedSyncTimer = setTimeout(() => { sharedSyncTimer = null; if (sharedSync && hasPendingSync('shared:' + sharedSync.secret)) pushSharedState(); }, 300);
 }
 async function pushSharedState() {
   if (!cloudClient || !sharedSync || sharedHydrating) return false;
@@ -1211,8 +1211,8 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('online', () => { refreshCloudStateWhenVisible(); refreshSharedStateWhenVisible(); });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
-    if (cloudUser) pushCloudState();
-    else if (sharedSync) pushSharedState();
+    if (cloudUser && hasPendingSync('user:' + cloudUser.id)) pushCloudState();
+    else if (!cloudUser && sharedSync && hasPendingSync('shared:' + sharedSync.secret)) pushSharedState();
   }
 });
 
