@@ -827,3 +827,6 @@ button.health-quick-card { font:inherit; }
   .daily-art-reflection { height:23%; }
   .art-info { font-size:12px; }
 }
+
+.art-about-label { margin:17px 0 0; color:#a15d2b; font:9px "DM Mono",monospace; letter-spacing:.1em; }
+.art-about-label + .art-info { margin-top:6px; }
