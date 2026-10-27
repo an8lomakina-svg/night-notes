@@ -1215,3 +1215,29 @@ renderBudget = () => {
   });
 };
 renderBudget();
+
+
+// A daily artwork and quotation replace the old task-focused landing screen.
+const inspirationCatalog = [
+  { quote:'В середине зимы я наконец понял, что во мне живёт непобедимое лето.', author:'Альбер Камю', title:'Звёздная ночь', artist:'Винсент ван Гог, 1889', image:'https://upload.wikimedia.org/wikipedia/commons/e/ea/The_Starry_Night.jpg' },
+  { quote:'Нет ничего невозможного для того, кто пробует.', author:'Александр Македонский', title:'Большая волна в Канагава', artist:'Кацусика Хокусай, ок. 1831', image:'https://upload.wikimedia.org/wikipedia/commons/0/0a/The_Great_Wave_off_Kanagawa.jpg' },
+  { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', image:'https://upload.wikimedia.org/wikipedia/commons/5/54/Claude_Monet%2C_Impression%2C_sunrise.jpg' },
+  { quote:'Красота спасёт мир.', author:'Фёдор Достоевский', title:'Рождение Венеры', artist:'Сандро Боттичелли, ок. 1485', image:'https://upload.wikimedia.org/wikipedia/commons/1/1c/Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg' }
+];
+function dailyInspirationIndex(key) { return [...key].reduce((sum, char) => sum + char.charCodeAt(0), 0) % inspirationCatalog.length; }
+function renderDailyInspiration() {
+  const artwork = $('#dailyArtwork'); if (!artwork) return;
+  state.inspirationArchive ??= [];
+  const key = dateKey(new Date());
+  let entry = state.inspirationArchive.find(item => item.date === key);
+  if (!entry) { entry = { date:key, ...inspirationCatalog[dailyInspirationIndex(key)] }; state.inspirationArchive.unshift(entry); save(); }
+  $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
+  artwork.src = entry.image; artwork.alt = `${entry.title} — ${entry.artist}`;
+  $('#dailyArtworkTitle').textContent = entry.title; $('#dailyArtworkArtist').textContent = entry.artist;
+  $('#dailyQuote').textContent = `«${entry.quote}»`; $('#dailyAuthor').textContent = `— ${entry.author}`;
+  const archive = $('#inspirationArchive'); archive.innerHTML = '';
+  state.inspirationArchive.slice(0, 14).forEach(item => { const row = document.createElement('article'); row.innerHTML = '<time></time><p></p><small></small>'; row.querySelector('time').textContent = item.date; row.querySelector('p').textContent = `«${item.quote}»`; row.querySelector('small').textContent = `${item.author} · ${item.title}`; archive.append(row); });
+}
+const renderCloudStateWithInspiration = renderCloudState;
+renderCloudState = () => { renderCloudStateWithInspiration(); renderDailyInspiration(); };
+renderDailyInspiration();
