@@ -810,3 +810,20 @@ button.health-quick-card { font:inherit; }
   .health-quick-grid { grid-template-columns:1fr; }
   .health-quick-card { min-height:86px; }
 }
+
+
+/* Daily museum card */
+.daily-art-frame { position:relative; isolation:isolate; }
+.daily-art-frame>#dailyArtwork { position:absolute; inset:0; z-index:1; }
+.daily-art-reflection { position:absolute; right:0; bottom:0; left:0; z-index:2; height:26%; overflow:hidden; pointer-events:none; opacity:.52; mask-image:linear-gradient(to bottom,rgba(0,0,0,.58),transparent); -webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,.58),transparent); }
+.daily-art-reflection img { width:100%; height:100%; object-fit:cover; transform:scaleY(-1) scale(1.08); filter:blur(.7px) saturate(.72); transform-origin:center; }
+.daily-art-frame:hover .daily-art-reflection img { transform:scaleY(-1) scale(1.1); }
+.daily-art-frame::after { content:""; position:absolute; right:0; bottom:0; left:0; z-index:3; height:35%; pointer-events:none; background:linear-gradient(to bottom,transparent,rgba(57,41,30,.12)); }
+.art-info { margin:15px 0 0; color:#765a46; font-size:12px; line-height:1.48; }
+.art-source { display:inline-flex; width:max-content; margin-top:10px; color:#a15d2b; border-bottom:1px solid rgba(161,93,43,.35); font:10px "DM Mono",monospace; letter-spacing:.03em; text-decoration:none; }
+.art-source:hover { color:#6e4228; border-color:#6e4228; }
+.daily-inspiration blockquote { margin-top:29px; }
+@media (max-width:760px) {
+  .daily-art-reflection { height:23%; }
+  .art-info { font-size:12px; }
+}
