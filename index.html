@@ -15,8 +15,12 @@
     <style>@media(max-width:760px){.sidebar{display:block;position:sticky;padding:9px 12px 7px;overflow:hidden}.sidebar:after{display:none}.wordmark{display:none}.sidebar nav{display:flex;overflow-x:auto;gap:6px;margin:0;padding:0 0 5px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}.nav-link{display:flex;flex:0 0 76px;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;min-width:76px;min-height:44px;padding:8px 7px;border:1px solid transparent;border-radius:10px;font-size:10px;white-space:normal}.nav-link span{font-size:8px;margin:0}.nav-link.active{border-color:rgba(199,122,61,.35);background:rgba(222,160,96,.16)}main{padding-top:0}}</style>
     <style id="compact-mobile-header">
       .mobile-more { display:none; }
+      .section-arrow { display:none; }
       @media (max-width:760px) {
-        .sidebar { display:flex; align-items:center; gap:8px; overflow:visible; z-index:7; }
+        .sidebar { display:flex; align-items:center; gap:4px; overflow:visible; z-index:7; }
+        .section-arrow { display:grid; place-items:center; flex:0 0 36px; width:36px; height:44px; margin-bottom:5px; padding:0; border:1px solid var(--line); border-radius:10px; background:rgba(255,252,247,.5); color:var(--ink); font-size:21px; }
+        .section-arrow:disabled { opacity:.3; cursor:default; }
+        .section-arrow:focus-visible { outline:2px solid var(--orange); outline-offset:2px; }
         .sidebar nav { flex:1 1 0; min-width:0; }
         .topbar { display:none; }
         .sidebar .top-actions { flex:0 0 auto; gap:4px; margin:0; padding-bottom:5px; position:relative; }
@@ -40,6 +44,7 @@
         <a class="wordmark" href="#top" aria-label="Night Notes, наверх">
           <span class="mark">N</span><span>night<br />notes</span>
         </a>
+        <button type="button" id="previousSection" class="section-arrow" aria-label="Предыдущий раздел">←</button>
         <nav aria-label="Главное меню">
           <a class="nav-link active" data-view="today" href="#today"><span>01</span> Сегодня</a>
           <a class="nav-link" data-view="calendar" href="#calendar"><span>02</span> Календарь</a>
@@ -48,6 +53,7 @@
           <a class="nav-link" data-view="notes" href="#notes"><span>05</span> Заметки</a>
           <a class="nav-link" data-view="archive" href="#archive"><span>06</span> Архив</a>
         </nav>
+        <button type="button" id="nextSection" class="section-arrow" aria-label="Следующий раздел">→</button>
         <div class="sidebar-bottom">
           <p class="mono">NEW YORK / FALL / 1985</p>
           <button id="themeToggle" class="text-button" aria-pressed="false" aria-label="Приглушить свет">◐ приглушить свет</button>
@@ -195,82 +201,40 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js?v=96"></script>
-    <script id="swipe-navigation">
+    <script id="arrow-navigation">
 (() => {
-  const surface = document.querySelector('main');
-  const mobile = window.matchMedia('(max-width:760px)');
-  const tabs = Array.from(document.querySelectorAll('.sidebar .nav-link[data-view]'));
-  const interactive = 'input,textarea,select,label,summary,[contenteditable]:not([contenteditable="false"]),[role="slider"],audio,video';
-  let gesture = null;
-  let suppressClickUntil = 0;
-  const blocked = target => {
-    if (target.closest(interactive) || document.querySelector('dialog[open]')) return true;
-    for (let node = target; node && node !== surface; node = node.parentElement) {
-      if (node.scrollWidth > node.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(node).overflowX)) return true;
-    }
-    return false;
-  };
-  surface.addEventListener('touchstart', event => {
-    gesture = null;
-    if (!mobile.matches || event.touches.length !== 1 || blocked(event.target) || window.getSelection()?.toString()) return;
-    const touch = event.touches[0];
-    if (touch.clientX < 20 || touch.clientX > window.innerWidth - 20) return;
-    gesture = { x:touch.clientX, y:touch.clientY, id:touch.identifier, time:performance.now(), axis:null };
-  }, {passive:true});
-  surface.addEventListener('touchmove', event => {
-    if (!gesture) return;
-    if (event.touches.length !== 1) { gesture = null; return; }
-    const touch = event.touches[0];
-    const dx = Math.abs(touch.clientX - gesture.x);
-    const dy = Math.abs(touch.clientY - gesture.y);
-    if (!gesture.axis) {
-      if (dy > 12 && dy > dx * 1.2) { gesture = null; return; }
-      if (dx > 10 && dx > dy * 1.2) gesture.axis = 'x';
-    }
-    if (gesture.axis === 'x') {
-      if (event.cancelable) event.preventDefault();
-      suppressClickUntil = performance.now() + 400;
-    }
-  }, {passive:false});
-  surface.addEventListener('touchcancel', () => { gesture = null; }, {passive:true});
-  surface.addEventListener('click', event => {
-    if (performance.now() < suppressClickUntil) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
-  }, true);
-  surface.addEventListener('touchend', event => {
-    const start = gesture;
-    gesture = null;
-    if (!start || !mobile.matches || event.touches.length || window.getSelection()?.toString()) return;
-    const touch = Array.from(event.changedTouches).find(item => item.identifier === start.id);
-    if (!touch) return;
-    const dx = touch.clientX - start.x;
-    const dy = touch.clientY - start.y;
-    const distance = Math.abs(dx);
-    const velocity = distance / Math.max(1, performance.now() - start.time);
-    if (distance < 48 && !(distance >= 24 && velocity >= 0.35)) return;
-    if (!start.axis && distance < Math.abs(dy) * 1.2) return;
-    const current = tabs.findIndex(tab => tab.classList.contains('active'));
-    const next = current < 0 ? null : tabs[current + (dx < 0 ? 1 : -1)];
-    if (!next) return;
-    suppressClickUntil = performance.now() + 400;
-    // Navigate once, without a synthetic click, hashchange render or smooth scroll.
-    const url = new URL(window.location.href);
-    url.hash = next.dataset.view;
-    history.pushState(null, '', url);
-    activateView(next.dataset.view);
-    window.scrollTo({top:0, behavior:'instant'});
-    const view = document.getElementById(next.dataset.view);
-    view.style.animation = 'none';
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && view.animate) {
-      view.animate([{transform:'translateX(' + (dx < 0 ? 14 : -14) + 'px)',opacity:0.8},{transform:'translateX(0)',opacity:1}], {duration:140,easing:'ease-out'});
-    }
-    const menu = next.parentElement;
-    const left = next.offsetLeft - menu.offsetLeft;
+  const menu = document.querySelector('.sidebar nav');
+  const tabs = Array.from(menu.querySelectorAll('.nav-link[data-view]'));
+  const previous = document.getElementById('previousSection');
+  const next = document.getElementById('nextSection');
+  function update() {
+    const index = tabs.findIndex(tab => tab.classList.contains('active'));
+    previous.disabled = index <= 0;
+    next.disabled = index < 0 || index >= tabs.length - 1;
+    previous.title = index > 0 ? tabs[index - 1].textContent.trim() : 'Первый раздел';
+    next.title = index >= 0 && index < tabs.length - 1 ? tabs[index + 1].textContent.trim() : 'Последний раздел';
+    if (index < 0 || !window.matchMedia('(max-width:760px)').matches) return;
+    const tab = tabs[index];
+    const left = tab.offsetLeft - menu.offsetLeft;
     if (left < menu.scrollLeft) menu.scrollLeft = left;
-    else if (left + next.offsetWidth > menu.scrollLeft + menu.clientWidth) menu.scrollLeft = left + next.offsetWidth - menu.clientWidth;
-  }, {passive:true});
+    else if (left + tab.offsetWidth > menu.scrollLeft + menu.clientWidth) menu.scrollLeft = left + tab.offsetWidth - menu.clientWidth;
+  }
+  function navigate(direction) {
+    const index = tabs.findIndex(tab => tab.classList.contains('active'));
+    const target = index < 0 ? null : tabs[index + direction];
+    if (!target) return;
+    const url = new URL(window.location.href);
+    url.hash = target.dataset.view;
+    history.pushState(null, '', url);
+    activateView(target.dataset.view);
+    window.scrollTo({top:0, behavior:'instant'});
+    update();
+  }
+  previous.addEventListener('click', () => navigate(-1));
+  next.addEventListener('click', () => navigate(1));
+  new MutationObserver(update).observe(menu, {subtree:true, attributes:true, attributeFilter:['class']});
+  window.addEventListener('hashchange', update);
+  update();
 })();
     </script>
   </body>
