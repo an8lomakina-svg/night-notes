@@ -64,10 +64,74 @@ const SYNC_CONFIG = { url: 'https://ucwiohxqtmdzlsboveie.supabase.co', key: 'sb_
 let cloudClient = null, cloudUser = null, cloudSyncTimer = null, cloudHydrating = false;
 let sharedSync = null, sharedSyncTimer = null, sharedHydrating = false;
 let selectedDate = new Date(); selectedDate.setHours(0,0,0,0); let month = new Date(selectedDate);
-const save = () => { localStorage.setItem('night-notes-v1', JSON.stringify(state)); renderArchive(); queueCloudSave(); queueSharedSave(); };
+// A durable pending marker prevents an older server snapshot from replacing local edits.
+const PENDING_SYNC_KEY = 'night-notes-pending-sync-v1';
+const SYNC_TARGET_KEY = 'night-notes-sync-target-v1';
+let pendingSync = null;
+try { pendingSync = JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || 'null'); } catch {}
+let localRevision = Number(pendingSync?.revision) || 0;
+let cloudPushPromise = null, sharedPushPromise = null;
+const syncTarget = () => cloudUser ? 'user:' + cloudUser.id
+  : sharedSync ? 'shared:' + sharedSync.secret
+  : new URLSearchParams(location.search).get('sync') ? 'shared:' + new URLSearchParams(location.search).get('sync')
+  : localStorage.getItem(SYNC_TARGET_KEY);
+const hasPendingSync = target => Boolean(pendingSync && (!pendingSync.target || pendingSync.target === target));
+const hasOtherPendingSync = target => Boolean(pendingSync?.target && pendingSync.target !== target);
+const rememberSyncTarget = target => localStorage.setItem(SYNC_TARGET_KEY, target);
+function acknowledgeSync(target, revision) {
+  if (hasPendingSync(target) && pendingSync.revision === revision) {
+    localStorage.removeItem(PENDING_SYNC_KEY);
+    pendingSync = null;
+  }
+}
+const save = () => {
+  const nextPending = {target:syncTarget(), revision:localRevision + 1};
+  const previousMarker = localStorage.getItem(PENDING_SYNC_KEY);
+  localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(nextPending));
+  try { localStorage.setItem('night-notes-v1', JSON.stringify(state)); }
+  catch (error) {
+    if (previousMarker === null) localStorage.removeItem(PENDING_SYNC_KEY);
+    else localStorage.setItem(PENDING_SYNC_KEY, previousMarker);
+    throw error;
+  }
+  pendingSync = nextPending;
+  localRevision = nextPending.revision;
+  renderArchive();
+  setSyncStatus('Сохранено на устройстве · ожидает синхронизации');
+  queueCloudSave();
+  queueSharedSave();
+};
 function setSyncStatus(message, synced = false) { const button = $('#syncAccount'); if (!button) return; button.classList.toggle('is-synced', synced); button.title = message; button.setAttribute('aria-label', message); }
-function queueCloudSave() { if (!cloudClient || !cloudUser || cloudHydrating) return; clearTimeout(cloudSyncTimer); cloudSyncTimer = setTimeout(pushCloudState, 650); }
-async function pushCloudState() { if (!cloudClient || !cloudUser) return; const { error } = await cloudClient.from('notebook_state').upsert({ user_id: cloudUser.id, payload: state, updated_at: new Date().toISOString() }); if (error) setSyncStatus('Ошибка синхронизации'); else setSyncStatus(`Автосинхронизация включена: ${cloudUser.email || 'твой аккаунт'}`, true); }
+function queueCloudSave() {
+  if (!cloudClient || !cloudUser || cloudHydrating) return;
+  clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = setTimeout(() => { cloudSyncTimer = null; pushCloudState(); }, 300);
+}
+async function pushCloudState() {
+  if (!cloudClient || !cloudUser || cloudHydrating) return false;
+  if (cloudPushPromise) return cloudPushPromise;
+  clearTimeout(cloudSyncTimer); cloudSyncTimer = null;
+  const user = cloudUser;
+  const target = 'user:' + user.id;
+  if (hasOtherPendingSync(target)) return false;
+  cloudPushPromise = (async () => {
+    try {
+      do {
+        const revision = localRevision;
+        const payload = JSON.parse(JSON.stringify(state));
+        const { error } = await cloudClient.from('notebook_state').upsert({user_id:user.id,payload,updated_at:new Date().toISOString()});
+        if (error) throw error;
+        acknowledgeSync(target, revision);
+      } while (cloudUser?.id === user.id && hasPendingSync(target));
+      setSyncStatus('Изменения синхронизированы', true);
+      return true;
+    } catch (error) {
+      setSyncStatus('Сохранено на устройстве · синхронизация не завершена');
+      return false;
+    } finally { cloudPushPromise = null; }
+  })();
+  return cloudPushPromise;
+}
 
 const SHARED_SECRET_KEY = 'night-notes-shared-secret-v1';
 const bytesToBase64 = bytes => btoa(String.fromCharCode(...bytes));
@@ -111,50 +175,72 @@ async function ensureSharedSync() {
   return sharedSync;
 }
 function queueSharedSave() {
-  if (!cloudClient || !sharedSync || sharedHydrating) return;
+  if (!cloudClient || !sharedSync || sharedHydrating || cloudUser) return;
   clearTimeout(sharedSyncTimer);
-  sharedSyncTimer = setTimeout(pushSharedState, 700);
+  sharedSyncTimer = setTimeout(() => { sharedSyncTimer = null; pushSharedState(); }, 300);
 }
 async function pushSharedState() {
   if (!cloudClient || !sharedSync || sharedHydrating) return false;
-  const payload = await encryptSharedState(sharedSync.secret, state);
-  const { error } = await cloudClient.rpc('save_shared_notebook', { p_sync_id: sharedSync.id, p_payload: payload });
-  if (error) {
-    setSyncStatus('Ошибка приватной синхронизации');
-    return false;
-  }
-  setSyncStatus('Приватная ссылка синхронизирована', true);
-  return true;
+  if (sharedPushPromise) return sharedPushPromise;
+  clearTimeout(sharedSyncTimer); sharedSyncTimer = null;
+  const notebook = sharedSync;
+  const target = 'shared:' + notebook.secret;
+  if (hasOtherPendingSync(target)) return false;
+  sharedPushPromise = (async () => {
+    try {
+      do {
+        const revision = localRevision;
+        const snapshot = JSON.parse(JSON.stringify(state));
+        const payload = await encryptSharedState(notebook.secret, snapshot);
+        const { error } = await cloudClient.rpc('save_shared_notebook', {p_sync_id:notebook.id,p_payload:payload});
+        if (error) throw error;
+        acknowledgeSync(target, revision);
+      } while (sharedSync?.id === notebook.id && !cloudUser && hasPendingSync(target));
+      setSyncStatus('Приватная ссылка синхронизирована', true);
+      return true;
+    } catch (error) {
+      setSyncStatus('Сохранено на устройстве · синхронизация не завершена');
+      return false;
+    } finally { sharedPushPromise = null; }
+  })();
+  return sharedPushPromise;
 }
 async function hydrateSharedState() {
-  if (!cloudClient || !sharedSync) return;
-  sharedHydrating = true;
-  setSyncStatus('Загружаю общий блокнот…');
-  const { data, error } = await cloudClient.rpc('get_shared_notebook', { p_sync_id: sharedSync.id });
-  if (error) {
-    sharedHydrating = false;
-    setSyncStatus('Ошибка приватной синхронизации');
-    if (syncMessage) syncMessage.textContent = 'Не удалось открыть приватную ссылку. Попробуй обновить страницу.';
+  if (!cloudClient || !sharedSync || sharedHydrating || cloudUser) return;
+  const notebook = sharedSync;
+  const target = 'shared:' + notebook.secret;
+  if (hasOtherPendingSync(target)) {
+    setSyncStatus('На устройстве есть неотправленные изменения другого блокнота');
     return;
   }
-  const localSnapshot = JSON.parse(JSON.stringify(state));
-  let remoteState = null;
-  try { remoteState = data ? await decryptSharedState(sharedSync.secret, data) : null; } catch { remoteState = null; }
-  // A private link represents one shared notebook. Its remote copy is always
-  // authoritative, including when it is intentionally empty after a cleanup.
-  // This prevents an older browser cache from restoring deleted entries.
-  if (remoteState) {
-    Object.keys(state).forEach(key => delete state[key]);
-    Object.assign(state, remoteState);
-    normalizeCloudState();
-    localStorage.setItem('night-notes-v1', JSON.stringify(state));
-    renderCloudState();
-  } else {
-    await pushSharedState();
+  rememberSyncTarget(target);
+  if (hasPendingSync(target) || sharedPushPromise) { await pushSharedState(); return; }
+  sharedHydrating = true;
+  const revision = localRevision;
+  let shouldPush = false;
+  try {
+    setSyncStatus('Загружаю общий блокнот…');
+    const {data,error} = await cloudClient.rpc('get_shared_notebook', {p_sync_id:notebook.id});
+    if (error) throw error;
+    const remoteState = data ? await decryptSharedState(notebook.secret, data) : null;
+    // A save can happen while the request or decryption is still running.
+    if (localRevision !== revision || hasPendingSync(target)) { shouldPush = true; return; }
+    if (sharedSync?.id !== notebook.id || cloudUser) return;
+    if (remoteState) {
+      Object.keys(state).forEach(key => delete state[key]);
+      Object.assign(state, remoteState);
+      normalizeCloudState();
+      localStorage.setItem('night-notes-v1', JSON.stringify(state));
+      renderCloudState();
+    } else { shouldPush = true; }
+    if (!shouldPush) setSyncStatus('Приватная ссылка синхронизирована', true);
+    if (syncMessage) syncMessage.textContent = 'Общий блокнот подключён. Все изменения шифруются в браузере.';
+  } catch (error) {
+    setSyncStatus('Не удалось синхронизировать · записи на устройстве сохранены');
+  } finally {
+    sharedHydrating = false;
+    if (shouldPush || hasPendingSync(target)) await pushSharedState();
   }
-  sharedHydrating = false;
-  setSyncStatus('Приватная ссылка синхронизирована', true);
-  if (syncMessage) syncMessage.textContent = 'Общий блокнот подключён. Все изменения шифруются в браузере.';
 }
 const archiveRecord=(record)=>state.archive.unshift({id:`archive-${Date.now()}-${Math.random().toString(16).slice(2)}`,archivedAt:new Date().toISOString(),...record});
 const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1035,45 +1121,38 @@ function hasNotebookEntries(source) {
 }
 
 async function hydrateCloudState() {
-  if (!cloudClient || !cloudUser) return;
-  cloudHydrating = true;
-  setSyncStatus('Загружаю синхронизированные данные…');
-  const { data, error } = await cloudClient.from('notebook_state').select('payload').eq('user_id', cloudUser.id).maybeSingle();
-  if (error) {
-    cloudHydrating = false;
-    setSyncStatus('Ошибка синхронизации');
-    if (syncMessage) syncMessage.textContent = 'Не удалось загрузить данные. Попробуй ещё раз.';
+  if (!cloudClient || !cloudUser || cloudHydrating) return;
+  const user = cloudUser;
+  const target = 'user:' + user.id;
+  if (hasOtherPendingSync(target)) {
+    setSyncStatus('На устройстве есть неотправленные изменения другого блокнота');
     return;
   }
-  const localSnapshot = JSON.parse(JSON.stringify(state));
-  const remotePayload = data?.payload && typeof data.payload === 'object' ? data.payload : null;
-  if (remotePayload && hasNotebookEntries(localSnapshot) && !hasNotebookEntries(remotePayload)) {
-    // Do not let a newly signed-in empty device erase the filled notebook.
-    Object.keys(state).forEach(key => delete state[key]);
-    Object.assign(state, localSnapshot);
-    normalizeCloudState();
-    localStorage.setItem('night-notes-v1', JSON.stringify(state));
-    renderCloudState();
-    await pushCloudState();
-    if (syncMessage) syncMessage.textContent = 'Данные с этого устройства сохранены в общий блокнот.';
-  } else if (remotePayload) {
-    Object.keys(state).forEach(key => delete state[key]);
-    Object.assign(state, remotePayload);
-    normalizeCloudState();
-    localStorage.setItem('night-notes-v1', JSON.stringify(state));
-    renderCloudState();
-  } else {
-    // The first signed-in device may be a freshly installed phone. Never let
-    // that empty local store overwrite the filled notebook on the desktop.
-    if (hasNotebookEntries(localSnapshot)) {
-      await pushCloudState();
-    } else if (syncMessage) {
-      syncMessage.textContent = 'Аккаунт подключён, но записей пока нет. Сначала войди на устройстве, где открыт заполненный блокнот.';
-    }
+  rememberSyncTarget(target);
+  if (hasPendingSync(target) || cloudPushPromise) { await pushCloudState(); return; }
+  cloudHydrating = true;
+  const revision = localRevision;
+  let shouldPush = false;
+  try {
+    const {data,error} = await cloudClient.from('notebook_state').select('payload').eq('user_id',user.id).maybeSingle();
+    if (error) throw error;
+    if (localRevision !== revision || hasPendingSync(target)) { shouldPush = true; return; }
+    if (cloudUser?.id !== user.id) return;
+    const remote = data?.payload && typeof data.payload === 'object' ? data.payload : null;
+    if (remote && !(hasNotebookEntries(state) && !hasNotebookEntries(remote))) {
+      Object.keys(state).forEach(key => delete state[key]);
+      Object.assign(state, remote);
+      normalizeCloudState();
+      localStorage.setItem('night-notes-v1', JSON.stringify(state));
+      renderCloudState();
+    } else { shouldPush = hasNotebookEntries(state); }
+    if (!shouldPush) setSyncStatus('Изменения синхронизированы', true);
+  } catch (error) {
+    setSyncStatus('Не удалось синхронизировать · записи на устройстве сохранены');
+  } finally {
+    cloudHydrating = false;
+    if (shouldPush || hasPendingSync(target)) await pushCloudState();
   }
-  cloudHydrating = false;
-  if (syncMessage) syncMessage.textContent = `Автосинхронизация включена для ${cloudUser.email || 'твоего аккаунта'}.`;
-  setSyncStatus(`Автосинхронизация включена: ${cloudUser.email || 'твой аккаунт'}`, true);
 }
 
 async function initCloudSync() {
@@ -1087,7 +1166,7 @@ async function initCloudSync() {
   if (syncSignOut) syncSignOut.hidden = !cloudUser;
   if (cloudUser) {
     await hydrateCloudState();
-  } else if (new URLSearchParams(window.location.search).has('sync') || window.location.hash.includes('sync=')) {
+  } else if (new URLSearchParams(window.location.search).has('sync') || window.location.hash.includes('sync=') || localStorage.getItem(SHARED_SECRET_KEY)) {
     // Keep old private-link notebooks working, but do not create a new
     // anonymous notebook for a fresh home-screen installation.
     await ensureSharedSync();
@@ -1099,7 +1178,10 @@ async function initCloudSync() {
     cloudUser = nextSession?.user || null;
     if (syncSignOut) syncSignOut.hidden = !cloudUser;
     if (cloudUser) setTimeout(() => hydrateCloudState(), 0);
-    else if (sharedSync) setSyncStatus('Приватная ссылка синхронизирована', true);
+    else if (sharedSync) {
+      const pending = hasPendingSync('shared:' + sharedSync.secret);
+      setSyncStatus(pending ? 'Сохранено на устройстве · ожидает синхронизации' : 'Приватная ссылка синхронизирована', !pending);
+    }
     else setSyncStatus('Войти по email, чтобы включить автосинхронизацию');
   });
 }
@@ -1107,7 +1189,7 @@ async function initCloudSync() {
 // A browser with an active session always refreshes when the notebook becomes
 // visible again. This keeps devices in step without any manual export or link.
 function refreshCloudStateWhenVisible() {
-  if (!cloudUser || cloudHydrating || cloudSyncTimer) return;
+  if (!cloudUser || cloudHydrating) return;
   hydrateCloudState();
 }
 function refreshSharedStateWhenVisible() {
@@ -1122,6 +1204,15 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     refreshCloudStateWhenVisible();
     refreshSharedStateWhenVisible();
+  }
+});
+
+// Retry pending writes after reconnecting, and start sending before iOS suspends the app.
+window.addEventListener('online', () => { refreshCloudStateWhenVisible(); refreshSharedStateWhenVisible(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    if (cloudUser) pushCloudState();
+    else if (sharedSync) pushSharedState();
   }
 });
 
@@ -1160,6 +1251,7 @@ $('#createShareLink')?.addEventListener('click', async () => {
   button.disabled = true;
   try {
     const sync = await ensureSharedSync();
+    if (cloudUser && hasPendingSync('user:' + cloudUser.id) && !await pushCloudState()) throw new Error('save_failed');
     if (!sync || !await pushSharedState()) throw new Error('save_failed');
     const link = new URL(window.location.href);
     // Put the key in the query string as well as the hash. The query survives
@@ -1557,7 +1649,8 @@ function renderDailyInspiration() {
     Object.assign(entry, { date:key, ...dailyArtwork });
     changed = changed || before !== JSON.stringify(entry);
   }
-  if (changed) save();
+  // Generated daily artwork is a local cache, not an unsent user edit.
+  if (changed) localStorage.setItem('night-notes-v1', JSON.stringify(state));
   $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
   const showArtwork = (node, fallback) => {
     node.onerror = () => { node.onerror = null; node.src = fallback; };
