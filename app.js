@@ -535,8 +535,8 @@ $('#budgetForm').addEventListener('submit',e=>{
   state.budget.transactions.push({id:recordedAt.getTime(),createdAt:recordedAt.toISOString(),name:name.value.trim(),amount:Number(amount.value),type,category:transactionCategory.value,currency:$('#transactionCurrency').value,date:$('#transactionDate').value,account:$('#transactionAccount')?.value||'',fromAccount:'',toAccount:''});
   name.value='';amount.value='';transferFrom.value='';transferTo.value='';save();renderBudget();
 });
-const HEALTH_FILE_LIMIT = 2 * 1024 * 1024;
-const HEALTH_TOTAL_FILE_LIMIT = 3 * 1024 * 1024;
+const HEALTH_FILE_LIMIT = 1 * 1024 * 1024;
+const HEALTH_TOTAL_FILE_LIMIT = Math.floor(1.5 * 1024 * 1024);
 let healthDraftFiles = [];
 let healthDraftStatus = 'done';
 let healthEditing = null;
@@ -676,7 +676,7 @@ $('#healthFiles').addEventListener('change', async event => {
     total += file.size;
   }
   event.target.value = '';
-  $('#healthFileHint').textContent = rejected.length ? `Не добавлено: ${rejected.join(', ')}. Можно до 2 МБ на файл и до 3 МБ всего.` : (healthDraftFiles.length ? 'Готово: файлы прикреплены к этой записи.' : 'Файл будет виден внутри этой записи и сохранится в твоём приватном блокноте.');
+  $('#healthFileHint').textContent = rejected.length ? `Не добавлено: ${rejected.join(', ')}. Можно до 1 МБ на файл и до 1,5 МБ всего.` : (healthDraftFiles.length ? 'Готово: файлы прикреплены к этой записи.' : 'Файл будет виден внутри этой записи и сохранится в твоём приватном блокноте.');
   renderHealthDraftFiles();
 });
 $('#healthCancelEdit').addEventListener('click', resetHealthComposer);
