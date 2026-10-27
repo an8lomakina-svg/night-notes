@@ -1397,27 +1397,64 @@ renderBudget();
 
 // A daily artwork and quotation replace the old task-focused landing screen.
 const inspirationCatalog = [
-  { quote:'В середине зимы я наконец понял, что во мне живёт непобедимое лето.', author:'Альбер Камю', title:'Звёздная ночь', artist:'Винсент ван Гог, 1889', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Starry%20Night.jpg?width=1200' },
-  { quote:'Нет ничего невозможного для того, кто пробует.', author:'Александр Македонский', title:'Большая волна в Канагава', artist:'Кацусика Хокусай, ок. 1831', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Great%20Wave%20off%20Kanagawa.jpg?width=1200' },
-  { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Monet_-_Impression%2C_Sunrise.jpg/1280px-Monet_-_Impression%2C_Sunrise.jpg' },
-  { quote:'Красота спасёт мир.', author:'Фёдор Достоевский', title:'Рождение Венеры', artist:'Сандро Боттичелли, ок. 1485', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Birth%20of%20Venus%20%28Botticelli%29%201.jpg?width=1200' }
+  { quote:'В середине зимы я наконец понял, что во мне живёт непобедимое лето.', author:'Альбер Камю', title:'Звёздная ночь', artist:'Винсент ван Гог, 1889', info:'Одна из самых узнаваемых картин Ван Гога: ночное небо над Сен-Реми, написанное в 1889 году.', source:'https://en.wikipedia.org/wiki/The_Starry_Night', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Starry%20Night.jpg?width=1200' },
+  { quote:'Нет ничего невозможного для того, кто пробует.', author:'Александр Македонский', title:'Большая волна в Канагава', artist:'Кацусика Хокусай, ок. 1831', info:'Гравюра из серии «Тридцать шесть видов Фудзи» — о силе моря и хрупкости лодок перед ним.', source:'https://en.wikipedia.org/wiki/The_Great_Wave_off_Kanagawa', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Great%20Wave%20off%20Kanagawa.jpg?width=1200' },
+  { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', info:'Гавань Гавра на рассвете. Название этой картины дало имя импрессионизму.', source:'https://en.wikipedia.org/wiki/Impression,_Sunrise', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Monet_-_Impression%2C_Sunrise.jpg/1280px-Monet_-_Impression%2C_Sunrise.jpg' },
+  { quote:'Красота спасёт мир.', author:'Фёдор Достоевский', title:'Рождение Венеры', artist:'Сандро Боттичелли, ок. 1485', info:'Богиня Венера выходит из моря на берег Кипра — один из символов флорентийского Возрождения.', source:'https://en.wikipedia.org/wiki/The_Birth_of_Venus', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Birth%20of%20Venus%20%28Botticelli%29%201.jpg?width=1200' }
 ];
 function dailyInspirationIndex(key) { return [...key].reduce((sum, char) => sum + char.charCodeAt(0), 0) % inspirationCatalog.length; }
+function normalizeInspirationArchive() {
+  const byDate = new Map();
+  (Array.isArray(state.inspirationArchive) ? state.inspirationArchive : []).forEach(item => {
+    if (item?.date && !byDate.has(item.date)) byDate.set(item.date, item);
+  });
+  state.inspirationArchive = [...byDate.values()].sort((a,b) => String(b.date).localeCompare(String(a.date)));
+  state.inspirationArchive.forEach(item => Object.assign(item, { date:item.date, ...inspirationCatalog[dailyInspirationIndex(item.date)] }));
+}
 function renderDailyInspiration() {
   const artwork = $('#dailyArtwork'); if (!artwork) return;
   state.inspirationArchive ??= [];
+  normalizeInspirationArchive();
   const key = dateKey(new Date());
   const dailyArtwork = inspirationCatalog[dailyInspirationIndex(key)];
   let entry = state.inspirationArchive.find(item => item.date === key);
-  if (!entry) { entry = { date:key, ...dailyArtwork }; state.inspirationArchive.unshift(entry); save(); }
-  else if (entry.image !== dailyArtwork.image) { Object.assign(entry, dailyArtwork); save(); }
+  let changed = false;
+  if (!entry) {
+    entry = { date:key, archivedAt:new Date().toISOString(), ...dailyArtwork };
+    state.inspirationArchive.unshift(entry);
+    changed = true;
+  } else {
+    const before = JSON.stringify(entry);
+    Object.assign(entry, { date:key, ...dailyArtwork });
+    changed = changed || before !== JSON.stringify(entry);
+  }
+  if (changed) save();
   $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
-  artwork.onerror = () => { artwork.onerror = null; artwork.src = 'assets-central-park-daylight.png'; artwork.alt = `${entry.title} — ${entry.artist}`; }; artwork.src = entry.image; artwork.alt = `${entry.title} — ${entry.artist}`;
-  $('#dailyArtworkTitle').textContent = entry.title; $('#dailyArtworkArtist').textContent = entry.artist;
-  $('#dailyQuote').textContent = `«${entry.quote}»`; $('#dailyAuthor').textContent = `— ${entry.author}`;
+  const showArtwork = (node, fallback) => {
+    node.onerror = () => { node.onerror = null; node.src = fallback; };
+    node.src = entry.image;
+    node.alt = `${entry.title} — ${entry.artist}`;
+  };
+  showArtwork(artwork, 'assets-central-park-daylight.png');
+  const reflection = $('#dailyArtworkReflection');
+  if (reflection) showArtwork(reflection, 'assets-central-park-daylight.png');
+  $('#dailyArtworkTitle').textContent = entry.title;
+  $('#dailyArtworkArtist').textContent = entry.artist;
+  $('#dailyArtworkInfo').textContent = entry.info;
+  $('#dailyArtworkSource').href = entry.source;
+  $('#dailyQuote').textContent = `«${entry.quote}»`;
+  $('#dailyAuthor').textContent = `— ${entry.author}`;
   const archive = $('#inspirationArchive'); archive.innerHTML = '';
-  state.inspirationArchive.slice(0, 14).forEach(item => { const row = document.createElement('article'); row.innerHTML = '<time></time><p></p><small></small>'; row.querySelector('time').textContent = item.date; row.querySelector('p').textContent = `«${item.quote}»`; row.querySelector('small').textContent = `${item.author} · ${item.title}`; archive.append(row); });
+  state.inspirationArchive.forEach(item => {
+    const row = document.createElement('article');
+    row.innerHTML = '<time></time><p></p><small></small>';
+    row.querySelector('time').textContent = item.date;
+    row.querySelector('p').textContent = `«${item.quote}»`;
+    row.querySelector('small').textContent = `${item.title} · ${item.artist}`;
+    archive.append(row);
+  });
 }
 const renderCloudStateWithInspiration = renderCloudState;
 renderCloudState = () => { renderCloudStateWithInspiration(); renderDailyInspiration(); };
+renderDailyInspiration(); };
 renderDailyInspiration();
