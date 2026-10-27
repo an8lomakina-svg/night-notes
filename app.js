@@ -57,6 +57,7 @@ state.plans.done ??= [];
 state.events ??= {};
 state.imports ??= [];
 state.archive ??= [];
+state.notes ??= [];
 state.hiddenGoogleEvents ??= [];
 state.selfCareDaily ??= {};
 const SYNC_CONFIG = { url: 'https://ucwiohxqtmdzlsboveie.supabase.co', key: 'sb_publishable_MACL1sYFp5rUQAkB26M4kQ_Bys6WsD1' };
@@ -216,7 +217,7 @@ function renderPlans(){
 }
 renderPlans();
 const activateView = (viewName, shouldScroll = false) => {
-  const view = document.getElementById(viewName) ? viewName : 'today';
+  const view = document.getElementById(viewName) ? viewName : 'notes';
   document.querySelectorAll('.nav-link,.view').forEach(element => element.classList.remove('active'));
   document.querySelector(`.nav-link[data-view="${view}"]`)?.classList.add('active');
   $(`#${view}`)?.classList.add('active');
@@ -903,7 +904,7 @@ $('#createShareLink')?.addEventListener('click', async () => {
     // Put the key in the query string as well as the hash. The query survives
     // more reliably when a user adds the page to the iOS Home Screen.
     link.searchParams.set('sync', sync.secret);
-    const currentView = window.location.hash && !window.location.hash.includes('sync=') ? window.location.hash : '#today';
+    const currentView = window.location.hash && !window.location.hash.includes('sync=') ? window.location.hash : '#notes';
     link.hash = currentView;
     shareLink.value = link.toString();
     shareLink.hidden = false;
@@ -1061,7 +1062,7 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=44')) budgetStylesheet.href = 'styles.css?v=45&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=44')) budgetStylesheet.href = 'styles.css?v=46&journey=1';
 mountBudgetJourney();
 renderBudget();
 
@@ -1160,3 +1161,29 @@ const renderBudgetWithArchiveLabels = renderBudget;
 renderBudget = () => { renderBudgetWithArchiveLabels(); labelArchiveActions($('#budget')); };
 renderTasks(); renderPlans(); renderShopping(); renderHealth('done'); renderHealth('todo'); renderBudget();
 
+
+// Notes are the landing space: lightweight, editable, and reversible through Archive.
+function renderNotes() {
+  const list = $('#notesList');
+  if (!list) return;
+  state.notes ??= [];
+  list.innerHTML = state.notes.length ? '' : '<p class="empty">Здесь можно оставить мысль, ссылку или важную деталь дня.</p>';
+  [...state.notes].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).forEach(note => {
+    const card = document.createElement('article'); card.className = 'note-card';
+    card.innerHTML = '<input class="note-title" aria-label="Заголовок заметки" placeholder="Без названия"/><textarea class="note-body" aria-label="Текст заметки" placeholder="Напиши, что важно сохранить…"></textarea><footer><time></time><button class="archive-action" type="button" aria-label="Архивировать заметку">В архив</button><button class="delete" type="button" aria-label="Удалить заметку">×</button></footer>';
+    const title = card.querySelector('.note-title'), body = card.querySelector('.note-body'), stamp = card.querySelector('time');
+    title.value = note.title || ''; body.value = note.body || '';
+    stamp.textContent = new Intl.DateTimeFormat('ru-RU', { day:'numeric', month:'short' }).format(new Date(note.updatedAt || Date.now())).toUpperCase();
+    const persist = () => { note.title = title.value.trim(); note.body = body.value.trim(); note.updatedAt = Date.now(); save(); };
+    title.onblur = persist; body.onblur = persist;
+    card.querySelector('.archive-action').onclick = () => { archiveRecord({ type:'ЗАМЕТКА', text:note.title || note.body || 'Заметка без текста', source:'note', payload:{ ...note } }); state.notes = state.notes.filter(item => item.id !== note.id); save(); renderNotes(); };
+    card.querySelector('.delete').onclick = () => { state.notes = state.notes.filter(item => item.id !== note.id); save(); renderNotes(); };
+    list.append(card);
+  });
+}
+$('#noteForm')?.addEventListener('submit', event => { event.preventDefault(); const title = $('#noteTitle'), body = $('#noteBody'); if (!title.value.trim() && !body.value.trim()) return; state.notes.unshift({ id:`note-${Date.now()}`, title:title.value.trim(), body:body.value.trim(), updatedAt:Date.now() }); title.value=''; body.value=''; save(); renderNotes(); });
+const restoreArchiveWithNotes = restoreArchive;
+restoreArchive = entry => { if (entry.source !== 'note') { restoreArchiveWithNotes(entry); renderNotes(); return; } state.notes.push(entry.payload); state.archive = state.archive.filter(item => item.id !== entry.id); save(); renderNotes(); };
+const renderCloudStateWithNotes = renderCloudState;
+renderCloudState = () => { renderCloudStateWithNotes(); renderNotes(); };
+renderNotes();
