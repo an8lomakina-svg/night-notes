@@ -679,3 +679,22 @@ body.night .film-location span { color:#965e2f; }
   #calendar .calendar-nav button { width:40px; height:40px; }
   #calendar .agenda-hint { display:none; }
 }
+
+/* The archive action is intentionally a clear, touch-friendly label, not an icon. */
+.archive-action {
+  min-height:32px;
+  padding:5px 7px;
+  border:1px solid rgba(184,104,49,.26);
+  border-radius:5px;
+  background:#fffaf2;
+  color:#8b5c3c;
+  font:600 10px "DM Mono",monospace;
+  letter-spacing:.01em;
+  white-space:nowrap;
+}
+.archive-action:hover { border-color:#a85e2c; background:#f7e8d4; }
+#budget .transaction .archive-action { padding:5px 7px; }
+@media (max-width:480px) {
+  .task,.shopping-item,.health-item { gap:8px; }
+  .task .archive-action,.shopping-item .archive-action,.health-item .archive-action { min-height:30px; padding-inline:6px; font-size:9px; }
+}
