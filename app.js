@@ -570,7 +570,11 @@ function renderHealthDraftFiles() {
     box.append(chip);
   });
 }
-function resetHealthComposer() {
+function setHealthComposerOpen(open) {
+  $('#healthEntryForm').hidden = !open;
+  $('#healthQuickActions').hidden = open;
+}
+function resetHealthComposer(close = true) {
   healthEditing = null;
   healthDraftFiles = [];
   healthDraftStatus = 'done';
@@ -582,6 +586,7 @@ function resetHealthComposer() {
   $('#healthEntryForm').querySelector('.health-save').textContent = 'Сохранить запись';
   document.querySelectorAll('[data-health-status]').forEach(button => button.classList.toggle('active', button.dataset.healthStatus === healthDraftStatus));
   renderHealthDraftFiles();
+  setHealthComposerOpen(!close);
 }
 function editHealthRecord(kind, item) {
   healthEditing = { kind, id: item.id };
@@ -591,6 +596,7 @@ function editHealthRecord(kind, item) {
   $('#healthKind').value = item.kind || 'Другое';
   $('#healthTitle').value = item.text || '';
   $('#healthNote').value = item.note || '';
+  setHealthComposerOpen(true);
   $('#healthCancelEdit').hidden = false;
   $('#healthEntryTitle').textContent = 'Скорректировать запись';
   $('#healthEntryForm').querySelector('.health-save').textContent = 'Сохранить изменения';
@@ -679,7 +685,34 @@ $('#healthFiles').addEventListener('change', async event => {
   $('#healthFileHint').textContent = rejected.length ? `Не добавлено: ${rejected.join(', ')}. Можно до 1 МБ на файл и до 1,5 МБ всего.` : (healthDraftFiles.length ? 'Готово: файлы прикреплены к этой записи.' : 'Файл будет виден внутри этой записи и сохранится в твоём приватном блокноте.');
   renderHealthDraftFiles();
 });
-$('#healthCancelEdit').addEventListener('click', resetHealthComposer);
+$('#healthQuickNote').addEventListener('click', () => {
+  resetHealthComposer(false);
+  $('#healthTitle').focus();
+});
+$('#healthQuickFiles').addEventListener('change', async event => {
+  const accepted = [];
+  const rejected = [];
+  for (const file of [...event.target.files]) {
+    if (file.size > HEALTH_FILE_LIMIT) { rejected.push(file.name); continue; }
+    const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
+    accepted.push({ id:`file-${Date.now()}-${Math.random().toString(16).slice(2)}`, name:file.name, type:file.type, size:file.size, data });
+  }
+  event.target.value = '';
+  if (accepted.length) {
+    normalizeHealthState();
+    accepted.forEach(file => state.health.done.unshift({
+      id:`health-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      text:file.name.replace(/\.[^.]+$/, '') || 'Документ',
+      date:healthDateToday(), kind:'Документ', note:'', attachments:[file]
+    }));
+    save(); renderHealth();
+  }
+  const hint = $('#healthQuickHint');
+  hint.textContent = accepted.length
+    ? `Готово: добавлено ${accepted.length} ${accepted.length === 1 ? 'вложение' : 'вложения'} в «Уже произошло».`
+    : (rejected.length ? `Не добавлено: ${rejected.join(', ')}. Файл должен быть до 1 МБ.` : 'Файл можно выбрать из «Фото», «Файлы» или снять камерой на телефоне.');
+});
+$('#healthCancelEdit').addEventListener('click', () => resetHealthComposer());
 resetHealthComposer();
 
 $('#askChatGpt').onclick=()=>{const shopping=state.shoppingLists.flatMap(list=>list.items.filter(item=>!item.done).map(item=>`— ${list.name}: ${item.text}`)).join('\n')||'— пока нет';const tasks=state.tasks.filter(t=>!t.done).map(t=>`— ${t.text}`).join('\n')||'— пока нет';const tx=state.budget.transactions;const income=tx.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0),expense=tx.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);const health=state.health.todo.map(x=>`— ${x.text}`).join('\n')||'— пока нет';const context=`Помоги мне мягко спланировать ближайшие дни.\n\nФокус дня: ${state.focus||'ещё не записан'}\n\nДела:\n${tasks}\n\nПокупки:\n${shopping}\n\nБюджет: доходы ${currency(income)}, расходы ${currency(expense)}.\n\nЗапланировать по здоровью:\n${health}\n\nПредложи реалистичный следующий шаг и бережный план без перегруза.`;window.open('https://chatgpt.com/','_blank','noopener');navigator.clipboard?.writeText(context).then(()=>{const label=$('.chatgpt-label');label.textContent='Контекст скопирован';setTimeout(()=>label.textContent='Спросить ChatGPT',1800)}).catch(()=>{});};
