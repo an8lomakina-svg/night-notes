@@ -217,7 +217,7 @@ function renderPlans(){
 }
 renderPlans();
 const activateView = (viewName, shouldScroll = false) => {
-  const view = document.getElementById(viewName) ? viewName : 'notes';
+  const view = document.getElementById(viewName) ? viewName : 'today';
   document.querySelectorAll('.nav-link,.view').forEach(element => element.classList.remove('active'));
   document.querySelector(`.nav-link[data-view="${view}"]`)?.classList.add('active');
   $(`#${view}`)?.classList.add('active');
@@ -904,7 +904,7 @@ $('#createShareLink')?.addEventListener('click', async () => {
     // Put the key in the query string as well as the hash. The query survives
     // more reliably when a user adds the page to the iOS Home Screen.
     link.searchParams.set('sync', sync.secret);
-    const currentView = window.location.hash && !window.location.hash.includes('sync=') ? window.location.hash : '#notes';
+    const currentView = window.location.hash && !window.location.hash.includes('sync=') ? window.location.hash : '#today';
     link.hash = currentView;
     shareLink.value = link.toString();
     shareLink.hidden = false;
