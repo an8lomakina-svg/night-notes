@@ -698,3 +698,7 @@ body.night .film-location span { color:#965e2f; }
   .task,.shopping-item,.health-item { gap:8px; }
   .task .archive-action,.shopping-item .archive-action,.health-item .archive-action { min-height:30px; padding-inline:6px; font-size:9px; }
 }
+
+/* Keep archive labels readable inside compact rows and cards. */
+.plan-item .archive-action { position:static; font-size:10px; }
+#calendar .event-actions .archive-action { min-height:32px; }
