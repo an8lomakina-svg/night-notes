@@ -1354,25 +1354,77 @@ renderTasks(); renderPlans(); renderShopping(); renderHealth('done'); renderHeal
 
 
 // Notes are the landing space: lightweight, editable, and reversible through Archive.
+let editingNoteId = null;
+function resetNoteEditor() {
+  editingNoteId = null;
+  $('#noteForm')?.reset();
+  $('#noteFormLabel').textContent = 'НОВАЯ ЗАМЕТКА';
+  $('#noteSubmit').textContent = 'Сохранить заметку';
+  $('#noteCancel').hidden = true;
+}
+function openNoteEditor(note) {
+  editingNoteId = note.id;
+  $('#noteFormLabel').textContent = 'РЕДАКТИРОВАНИЕ ЗАМЕТКИ';
+  $('#noteTitle').value = note.title || '';
+  $('#noteBody').value = note.body || '';
+  $('#noteSubmit').textContent = 'Сохранить изменения';
+  $('#noteCancel').hidden = false;
+  $('#noteForm').scrollIntoView({ behavior:'smooth', block:'start' });
+  $('#noteTitle').focus();
+}
+function insertNoteMarker(marker) {
+  const body = $('#noteBody');
+  const caret = body.selectionStart || 0;
+  const lineStart = body.value.lastIndexOf('\n', Math.max(0, caret - 1)) + 1;
+  if (!body.value.slice(lineStart).startsWith(marker)) body.setRangeText(marker, lineStart, lineStart, 'end');
+  body.focus();
+}
 function renderNotes() {
   const list = $('#notesList');
   if (!list) return;
   state.notes ??= [];
+  state.notes = state.notes.filter(note => note && typeof note === 'object').map(note => ({ ...note, title:String(note.title || ''), body:String(note.body || ''), updatedAt:note.updatedAt || Date.now() }));
   list.innerHTML = state.notes.length ? '' : '<p class="empty">Здесь можно оставить мысль, ссылку или важную деталь дня.</p>';
   [...state.notes].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).forEach(note => {
-    const card = document.createElement('article'); card.className = 'note-card';
-    card.innerHTML = '<input class="note-title" aria-label="Заголовок заметки" placeholder="Без названия"/><textarea class="note-body" aria-label="Текст заметки" placeholder="Напиши, что важно сохранить…"></textarea><footer><time></time><button class="archive-action" type="button" aria-label="Архивировать заметку">В архив</button><button class="delete" type="button" aria-label="Удалить заметку">×</button></footer>';
-    const title = card.querySelector('.note-title'), body = card.querySelector('.note-body'), stamp = card.querySelector('time');
-    title.value = note.title || ''; body.value = note.body || '';
-    stamp.textContent = new Intl.DateTimeFormat('ru-RU', { day:'numeric', month:'short' }).format(new Date(note.updatedAt || Date.now())).toUpperCase();
-    const persist = () => { note.title = title.value.trim(); note.body = body.value.trim(); note.updatedAt = Date.now(); save(); };
-    title.onblur = persist; body.onblur = persist;
-    card.querySelector('.archive-action').onclick = () => { archiveRecord({ type:'ЗАМЕТКА', text:note.title || note.body || 'Заметка без текста', source:'note', payload:{ ...note } }); state.notes = state.notes.filter(item => item.id !== note.id); save(); renderNotes(); };
-    card.querySelector('.delete').onclick = () => { state.notes = state.notes.filter(item => item.id !== note.id); save(); renderNotes(); };
+    const card = document.createElement('article');
+    card.className = 'note-card';
+    card.innerHTML = '<header><time></time><div class="note-card-actions"><button class="note-edit" type="button">Изменить</button><button class="archive-action" type="button" aria-label="Архивировать заметку">В архив</button><button class="delete" type="button" aria-label="Удалить заметку">×</button></div></header><h3></h3><div class="note-card-body"></div>';
+    card.querySelector('time').textContent = new Intl.DateTimeFormat('ru-RU', { day:'numeric', month:'short' }).format(new Date(note.updatedAt)).toUpperCase();
+    card.querySelector('h3').textContent = note.title || 'Без названия';
+    const body = card.querySelector('.note-card-body');
+    body.textContent = note.body || 'Без текста';
+    body.hidden = !note.body;
+    card.querySelector('.note-edit').onclick = () => openNoteEditor(note);
+    card.querySelector('.archive-action').onclick = () => {
+      archiveRecord({ type:'ЗАМЕТКА', text:note.title || note.body || 'Заметка без текста', source:'note', payload:{ ...note } });
+      state.notes = state.notes.filter(item => item.id !== note.id);
+      save(); renderNotes();
+    };
+    card.querySelector('.delete').onclick = () => {
+      state.notes = state.notes.filter(item => item.id !== note.id);
+      save(); renderNotes();
+    };
     list.append(card);
   });
 }
-$('#noteForm')?.addEventListener('submit', event => { event.preventDefault(); const title = $('#noteTitle'), body = $('#noteBody'); if (!title.value.trim() && !body.value.trim()) return; state.notes.unshift({ id:`note-${Date.now()}`, title:title.value.trim(), body:body.value.trim(), updatedAt:Date.now() }); title.value=''; body.value=''; save(); renderNotes(); });
+$('#noteForm')?.addEventListener('submit', event => {
+  event.preventDefault();
+  const title = $('#noteTitle'), body = $('#noteBody');
+  if (!title.value.trim() && !body.value.trim()) return;
+  state.notes ??= [];
+  const current = editingNoteId ? state.notes.find(note => note.id === editingNoteId) : null;
+  if (current) {
+    current.title = title.value.trim();
+    current.body = body.value.trim();
+    current.updatedAt = Date.now();
+  } else {
+    state.notes.unshift({ id:`note-${Date.now()}-${Math.random().toString(16).slice(2)}`, title:title.value.trim(), body:body.value.trim(), updatedAt:Date.now() });
+  }
+  save(); renderNotes(); resetNoteEditor();
+});
+document.querySelectorAll('[data-note-marker]').forEach(button => button.addEventListener('click', () => insertNoteMarker(button.dataset.noteMarker)));
+$('#noteCancel')?.addEventListener('click', resetNoteEditor);
+resetNoteEditor();
 const restoreArchiveWithNotes = restoreArchive;
 restoreArchive = entry => { if (entry.source !== 'note') { restoreArchiveWithNotes(entry); renderNotes(); return; } state.notes.push(entry.payload); state.archive = state.archive.filter(item => item.id !== entry.id); save(); renderNotes(); };
 const renderCloudStateWithNotes = renderCloudState;
