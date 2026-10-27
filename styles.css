@@ -33,9 +33,12 @@ body { background:#f5eddf; color:var(--ink); }
 
 /* Keep account, radio and ChatGPT controls reachable on phones. */
 @media (max-width:760px) {
+  /* Reserve one row for navigation so the two sticky bars never overlap. */
+  .sidebar { height:66px; }
+  .sidebar nav { height:49px; }
   .topbar {
     position:sticky;
-    top:0;
+    top:66px;
     z-index:6;
     min-height:52px;
     height:52px;
@@ -848,3 +851,4 @@ button.health-quick-card { font:inherit; }
   .note-card header { align-items:flex-start; flex-direction:column; }
   .note-card-actions { width:100%; justify-content:flex-end; }
 }
+
