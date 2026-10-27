@@ -195,6 +195,58 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js?v=96"></script>
+    <script id="swipe-navigation">
+(() => {
+  const surface = document.querySelector('main');
+  const mobile = window.matchMedia('(max-width:760px)');
+  const interactive = 'input,textarea,select,button,a,label,summary,[contenteditable]:not([contenteditable="false"]),[role="slider"],audio,video';
+  let gesture = null;
+  const blocked = target => {
+    if (target.closest(interactive) || document.querySelector('dialog[open]')) return true;
+    for (let node = target; node && node !== surface; node = node.parentElement) {
+      if (node.scrollWidth > node.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(node).overflowX)) return true;
+    }
+    return false;
+  };
+  surface.addEventListener('touchstart', event => {
+    gesture = null;
+    if (!mobile.matches || event.touches.length !== 1 || blocked(event.target) || window.getSelection()?.toString()) return;
+    const touch = event.touches[0];
+    // Leave the screen edges available for native browser navigation.
+    if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
+    gesture = { x:touch.clientX, y:touch.clientY, id:touch.identifier, time:performance.now() };
+  }, {passive:true});
+  surface.addEventListener('touchmove', event => {
+    if (!gesture) return;
+    if (event.touches.length !== 1) { gesture = null; return; }
+    const touch = event.touches[0];
+    const dx = Math.abs(touch.clientX - gesture.x);
+    const dy = Math.abs(touch.clientY - gesture.y);
+    if (dy > 12 && dy > dx) gesture = null;
+  }, {passive:true});
+  surface.addEventListener('touchcancel', () => { gesture = null; }, {passive:true});
+  surface.addEventListener('touchend', event => {
+    const start = gesture;
+    gesture = null;
+    if (!start || !mobile.matches || event.touches.length || window.getSelection()?.toString()) return;
+    const touch = Array.from(event.changedTouches).find(item => item.identifier === start.id);
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 64 || Math.abs(dx) < Math.abs(dy) * 1.8 || performance.now() - start.time > 800) return;
+    const tabs = Array.from(document.querySelectorAll('.sidebar .nav-link[data-view]'));
+    const current = tabs.findIndex(tab => tab.classList.contains('active'));
+    if (current < 0) return;
+    const next = tabs[current + (dx < 0 ? 1 : -1)];
+    if (!next) return;
+    next.click();
+    const menu = next.parentElement;
+    const left = next.offsetLeft - menu.offsetLeft;
+    if (left < menu.scrollLeft) menu.scrollLeft = left;
+    else if (left + next.offsetWidth > menu.scrollLeft + menu.clientWidth) menu.scrollLeft = left + next.offsetWidth - menu.clientWidth;
+  }, {passive:true});
+})();
+    </script>
   </body>
 </html>
 
