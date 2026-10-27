@@ -1221,7 +1221,7 @@ renderBudget();
 const inspirationCatalog = [
   { quote:'В середине зимы я наконец понял, что во мне живёт непобедимое лето.', author:'Альбер Камю', title:'Звёздная ночь', artist:'Винсент ван Гог, 1889', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Starry%20Night.jpg?width=1200' },
   { quote:'Нет ничего невозможного для того, кто пробует.', author:'Александр Македонский', title:'Большая волна в Канагава', artist:'Кацусика Хокусай, ок. 1831', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Great%20Wave%20off%20Kanagawa.jpg?width=1200' },
-  { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', image:'https://commons.wikimedia.org/wiki/Special:FilePath/Monet%20-%20Impression%2C%20Sunrise.jpg?width=1200' },
+  { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Monet_-_Impression%2C_Sunrise.jpg/1280px-Monet_-_Impression%2C_Sunrise.jpg' },
   { quote:'Красота спасёт мир.', author:'Фёдор Достоевский', title:'Рождение Венеры', artist:'Сандро Боттичелли, ок. 1485', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Birth%20of%20Venus%20%28Botticelli%29%201.jpg?width=1200' }
 ];
 function dailyInspirationIndex(key) { return [...key].reduce((sum, char) => sum + char.charCodeAt(0), 0) % inspirationCatalog.length; }
