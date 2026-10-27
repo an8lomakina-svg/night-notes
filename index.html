@@ -42,7 +42,11 @@
       #budget .budget-date-toolbar select:focus-visible { outline:2px solid var(--orange); outline-offset:2px; }
     </style>
     <style id="stable-budget-form">
-      #budget .budget-form-feedback { grid-column:1 / -1; min-height:44px; margin:0; padding:6px 0; font-size:13px; line-height:1.4; overflow-wrap:anywhere; color:#54784f; }
+      #budget .budget-form-feedback { grid-column:1 / -1; min-height:64px; margin:0; padding:8px 10px; border:1px solid transparent; border-radius:10px; font-size:14px; line-height:1.4; overflow-wrap:anywhere; color:#38603d; }
+      #budget .budget-form-feedback[data-state="success"] { background:rgba(133,163,110,.08); border-color:rgba(133,163,110,.22); }
+      #budget .budget-receipt-title, #budget .budget-receipt-details { display:block; }
+      #budget .budget-receipt-title { font-size:14px; font-weight:500; }
+      #budget .budget-receipt-details { margin-top:3px; color:#75816d; font-size:12px; }
       #budget .budget-form-feedback[data-state="error"] { color:#a33f29; }
       #budget #budgetForm [aria-invalid="true"] { border-color:#a33f29; outline:1px solid #a33f29; }
       #budget #budgetForm .add-button { min-height:48px; touch-action:manipulation; }
@@ -222,7 +226,7 @@
       })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=99"></script>
+    <script src="app.js?v=100"></script>
     <script id="arrow-navigation">
 (() => {
   const menu = document.querySelector('.sidebar nav');
