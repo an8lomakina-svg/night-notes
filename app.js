@@ -531,11 +531,12 @@ transactionType.onchange=refreshTransactionForm;
 refreshTransactionForm();
 const budgetForm = $('#budgetForm');
 const budgetSubmit = budgetForm.querySelector('button[type="submit"]');
-const budgetFeedback = document.createElement('p');
+const budgetFeedback = document.createElement('div');
 budgetFeedback.id = 'budgetFormFeedback';
 budgetFeedback.className = 'budget-form-feedback';
 budgetFeedback.setAttribute('role', 'status');
 budgetFeedback.setAttribute('aria-live', 'polite');
+budgetFeedback.setAttribute('aria-atomic', 'true');
 budgetForm.append(budgetFeedback);
 budgetForm.noValidate = true;
 const budgetPrimaryFields = ['transactionName', 'transactionAmount', 'transactionDate', 'transactionCategory'];
@@ -545,8 +546,15 @@ budgetPrimaryFields.forEach(id => {
   field.addEventListener('input', () => field.removeAttribute('aria-invalid'));
   field.addEventListener('change', () => field.removeAttribute('aria-invalid'));
 });
-budgetForm.addEventListener('input', () => { budgetFeedback.textContent = ''; });
-budgetForm.addEventListener('change', () => { budgetFeedback.textContent = ''; });
+const updateBudgetFeedbackForDraft = () => {
+  budgetSubmit.textContent = 'Добавить';
+  if (budgetFeedback.dataset.state === 'error') {
+    budgetFeedback.textContent = '';
+    delete budgetFeedback.dataset.state;
+  }
+};
+budgetForm.addEventListener('input', updateBudgetFeedbackForDraft);
+budgetForm.addEventListener('change', updateBudgetFeedbackForDraft);
 // Keep the keyboard from moving the button between touch-down and click.
 budgetSubmit.addEventListener('pointerdown', event => {
   const active = document.activeElement;
@@ -588,7 +596,16 @@ budgetForm.addEventListener('submit', e => {
   amount.dispatchEvent(new Event('input', {bubbles:true}));
   renderBudget();
   budgetFeedback.dataset.state = 'success';
-  budgetFeedback.textContent = 'Добавлено: ' + item.name + ' · ' + currency(item.amount, item.currency);
+  budgetFeedback.replaceChildren();
+  const confirmation = document.createElement('strong');
+  confirmation.className = 'budget-receipt-title';
+  confirmation.textContent = '✓ Добавлено: ' + item.name + ' · ' + currency(item.amount, item.currency);
+  const details = document.createElement('span');
+  details.className = 'budget-receipt-details';
+  const dateLabel = new Intl.DateTimeFormat('ru-RU', {day:'numeric', month:'long', year:'numeric'}).format(new Date(item.date + 'T12:00:00'));
+  details.textContent = (item.type === 'income' ? 'Доход' : 'Расход') + ' · ' + dateLabel + ' · ' + item.category;
+  budgetFeedback.append(confirmation, details);
+  budgetSubmit.textContent = '✓ Добавлено';
 });
 const HEALTH_FILE_LIMIT = 1 * 1024 * 1024;
 const HEALTH_TOTAL_FILE_LIMIT = Math.floor(1.5 * 1024 * 1024);
