@@ -792,3 +792,21 @@ body.night .film-location span { color:#965e2f; }
   .health-record-top { align-items:flex-start; flex-wrap:wrap; }
   .health-record-actions { width:100%; margin-left:0; justify-content:flex-end; }
 }
+
+
+.health-quick-actions { margin-top:20px; }
+.health-quick-title { margin:0 0 10px; color:#765a46; font-size:13px; }
+.health-quick-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.health-quick-card { display:grid; grid-template-columns:36px 1fr; column-gap:10px; align-items:center; min-height:100px; padding:15px; border:1px solid rgba(91,61,38,.2); background:rgba(255,253,248,.78); color:#493125; text-align:left; cursor:pointer; }
+button.health-quick-card { font:inherit; }
+.health-quick-card:hover { border-color:#c87532; background:#fffaf2; transform:translateY(-1px); }
+.health-quick-card>span { grid-row:span 2; display:grid; place-items:center; width:34px; height:34px; border-radius:50%; background:#f1d1a5; color:#8b5026; }
+.health-quick-card strong { font:500 17px/1.05 "Playfair Display",serif; }
+.health-quick-card small { margin-top:4px; color:#765a46; font-size:11px; line-height:1.35; }
+.health-quick-hint { margin:11px 0 0; color:#8e705b; font-size:11px; line-height:1.4; }
+.health-entry-form[hidden] { display:none; }
+.health-entry-form:not([hidden]) { margin-top:20px; padding-top:18px; border-top:1px solid rgba(91,61,38,.16); }
+@media (max-width:760px) {
+  .health-quick-grid { grid-template-columns:1fr; }
+  .health-quick-card { min-height:86px; }
+}
