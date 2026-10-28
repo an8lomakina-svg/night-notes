@@ -594,20 +594,33 @@ const budgetEntriesByDate = (entries = state.budget.transactions) => [...entries
   if (leftCreated !== null && rightCreated !== null) return (leftCreated - rightCreated) * direction;
   return 0;
 });
-function renderBudget(){ const tx=state.budget.transactions;const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts={};filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${key}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction';row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${item.fromAccount} → ${item.toAccount} · `:'';row.querySelector('small').textContent=`${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
+function renderBudget(){ const tx=state.budget.transactions;const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts=Object.create(null);filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${escapeBudgetCategory(key)}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction'+(item.type==='planned'?' transaction-planned':'');row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${item.fromAccount} → ${item.toAccount} · `:'';row.querySelector('small').textContent=`${item.type==='planned'?'Запланировано · ':''}${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':item.type==='planned'?'◷ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
 $('#transactionDate').value=new Date().toISOString().slice(0,10);
 $('#budgetCurrencyFilter').onchange=renderBudget;
 const expenseCategories=['Доставка еды','Рестораны и кофе','Продукты','Такси','Авиабилеты','Дом и аренда','Стоматолог','Аптека и здоровье','Массаж и уход','Связь и подписки','Мобильный кэш · Катя','Красота','Досуг','Прочее'];
 const incomeCategories=['Зарплата','Займ','Перевод от себя','Возврат','Подарок','Другое'];
 const transactionType=$('#transactionType'), transactionCategory=$('#transactionCategory'), transferFrom=$('#transferFrom'), transferTo=$('#transferTo');
 transactionType.querySelector('option[value="transfer"]')?.remove();
+function budgetCategoriesFor(type) {
+  const kind = type === 'income' ? 'income' : 'expense';
+  const defaults = kind === 'income' ? incomeCategories : expenseCategories;
+  const custom = state.budget.customCategories?.[kind];
+  const all = [...defaults, ...(Array.isArray(custom) ? custom.filter(value => typeof value === 'string') : [])];
+  const seen = new Set();
+  return all.map(value => value.trim()).filter(value => {
+    const key = value.toLocaleLowerCase('ru');
+    if (!value || seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+}
+const escapeBudgetCategory = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 function refreshTransactionForm(){
   if (transactionType.value === 'transfer') transactionType.value = 'expense';
   const type=transactionType.value;
-  const categories=type==='income'?incomeCategories:expenseCategories;
+  const categories=budgetCategoriesFor(type);
   const previous=transactionCategory.value;
   transactionCategory.required=true;
-  transactionCategory.innerHTML=`<option value="" disabled>Выберите категорию</option>${categories.map(category=>`<option>${category}</option>`).join('')}`;
+  transactionCategory.innerHTML=`<option value="" disabled>Выберите категорию</option>${categories.map(category=>`<option>${escapeBudgetCategory(category)}</option>`).join('')}`;
   transactionCategory.value=categories.includes(previous)?previous:'';
   transferFrom.hidden=transferTo.hidden=true;
   transferFrom.required=transferTo.required=false;
@@ -656,7 +669,7 @@ budgetForm.addEventListener('submit', e => {
   const invalid = !name.value.trim() ? [name, 'Введите название операции.']
     : !amount.value || !Number.isFinite(amountValue) || amountValue <= 0 || !amount.validity.valid ? [amount, 'Введите сумму больше нуля, не более двух знаков после запятой.']
     : !date.value || !date.validity.valid ? [date, 'Укажите дату операции.']
-    : !(type === 'income' ? incomeCategories : expenseCategories).includes(transactionCategory.value) ? [transactionCategory, 'Выберите категорию операции.']
+    : !budgetCategoriesFor(type).includes(transactionCategory.value) ? [transactionCategory, 'Выберите категорию операции.']
     : null;
   if (invalid) {
     invalid[0].setAttribute('aria-invalid', 'true');
@@ -689,7 +702,7 @@ budgetForm.addEventListener('submit', e => {
   const details = document.createElement('span');
   details.className = 'budget-receipt-details';
   const dateLabel = new Intl.DateTimeFormat('ru-RU', {day:'numeric', month:'long', year:'numeric'}).format(new Date(item.date + 'T12:00:00'));
-  details.textContent = (item.type === 'income' ? 'Доход' : 'Расход') + ' · ' + dateLabel + ' · ' + item.category;
+  details.textContent = (item.type === 'income' ? 'Доход' : item.type === 'planned' ? 'Запланировано' : 'Расход') + ' · ' + dateLabel + ' · ' + item.category;
   budgetFeedback.append(confirmation, details);
   budgetSubmit.textContent = '✓ Добавлено';
 });
@@ -910,7 +923,7 @@ const accountById = id => budgetAccounts.find(account => account.id === id);
 const renderBudgetWithComments = renderBudget;
 renderBudget = () => {
   renderBudgetWithComments();
-  const categoryListFor = item => item.type === 'income' ? incomeCategories : item.type === 'transfer' ? ['Перевод между своими картами'] : expenseCategories;
+  const categoryListFor = item => item.type === 'transfer' ? ['Перевод между своими картами'] : budgetCategoriesFor(item.type);
   const escapeOption = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const entries = budgetEntriesByDate();
   document.querySelectorAll('#transactionList .transaction').forEach((row, index) => {
@@ -931,7 +944,7 @@ renderBudget = () => {
     const editor = document.createElement('form');
     editor.className = 'transaction-editor';
     const categories = categoryListFor(item);
-    editor.innerHTML = `<label>Тип<select name="type" aria-label="Тип операции"><option value="expense"${item.type === 'expense' ? ' selected' : ''}>Расход</option><option value="income"${item.type === 'income' ? ' selected' : ''}>Доход</option>${item.type === 'transfer' ? '<option value="transfer" selected>Перевод</option>' : ''}</select></label><label>Валюта<select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select></label><label class="transaction-edit-wide">Название<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"></label><label>Сумма<input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"></label><label>Дата<input name="date" aria-label="Дата операции" type="date" value="${item.date || ''}"></label><label class="transaction-edit-wide">Счёт<select name="account" aria-label="Счёт операции"><option value="">Без счёта</option>${budgetAccounts.map(account => `<option value="${account.id}"${item.account === account.id ? ' selected' : ''}>${account.label}</option>`).join('')}</select></label><label class="transaction-edit-wide">Категория<select name="category" aria-label="Категория операции"></select></label><label class="transaction-edit-wide">Комментарий<textarea name="comment" aria-label="Комментарий к операции" rows="2" placeholder="Необязательно">${escapeOption(item.comment || '')}</textarea></label><button type="submit">Сохранить изменения</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
+    editor.innerHTML = `<label>Тип<select name="type" aria-label="Тип операции"><option value="expense"${item.type === 'expense' ? ' selected' : ''}>Расход</option><option value="income"${item.type === 'income' ? ' selected' : ''}>Доход</option><option value="planned"${item.type === 'planned' ? ' selected' : ''}>Запланированная трата</option>${item.type === 'transfer' ? '<option value="transfer" selected>Перевод</option>' : ''}</select></label><label>Валюта<select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select></label><label class="transaction-edit-wide">Название<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"></label><label>Сумма<input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"></label><label>Дата<input name="date" aria-label="Дата операции" type="date" value="${item.date || ''}"></label><label class="transaction-edit-wide">Счёт<select name="account" aria-label="Счёт операции"><option value="">Без счёта</option>${budgetAccounts.map(account => `<option value="${account.id}"${item.account === account.id ? ' selected' : ''}>${account.label}</option>`).join('')}</select></label><label class="transaction-edit-wide">Категория<select name="category" aria-label="Категория операции"></select></label><label class="transaction-edit-wide">Комментарий<textarea name="comment" aria-label="Комментарий к операции" rows="2" placeholder="Необязательно">${escapeOption(item.comment || '')}</textarea></label><button type="submit">Сохранить изменения</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
     const typeField = editor.querySelector('[name="type"]');
     const categoryField = editor.querySelector('[name="category"]');
     const setCategories = (selectedCategory = item.category) => {
@@ -1096,6 +1109,7 @@ function normalizeCloudState() {
 
 function renderCloudState() {
   normalizeCloudState();
+  refreshTransactionForm();
   renderTasks();
   renderPlans();
   renderCalendar();
@@ -1107,7 +1121,7 @@ function renderCloudState() {
 }
 
 function hasNotebookEntries(source) {
-  const budget = source?.budget?.transactions?.length || 0;
+  const budget = (source?.budget?.transactions?.length || 0) + Object.values(source?.budget?.customCategories || {}).reduce((n, list) => n + (Array.isArray(list) ? list.length : 0), 0);
   const events = Object.values(source?.events || {}).reduce((count, day) => count + (Array.isArray(day) ? day.length : 0), 0);
   const imports = source?.imports?.length || 0;
   const shopping = (source?.shoppingLists || []).reduce((count, list) => count + (list?.items?.length || 0), 0);
@@ -1294,7 +1308,7 @@ function mountBudgetJourney() {
   const quick = document.createElement('div');
   quick.className = 'budget-quick-actions';
   quick.setAttribute('aria-label', 'Быстрые действия бюджета');
-  quick.innerHTML = '<button type="button" class="budget-quick-action is-active" data-budget-action="expense"><span>−</span><strong>Расход</strong><small>покупка или услуга</small></button><button type="button" class="budget-quick-action" data-budget-action="income"><span>＋</span><strong>Доход</strong><small>зарплата, возврат или перевод</small></button>';
+  quick.innerHTML = '<button type="button" class="budget-quick-action is-active" data-budget-action="expense"><span>−</span><strong>Расход</strong><small>покупка или услуга</small></button><button type="button" class="budget-quick-action" data-budget-action="income"><span>＋</span><strong>Доход</strong><small>зарплата, возврат или перевод</small></button><button type="button" class="budget-quick-action" data-budget-action="planned"><span>◷</span><strong>План</strong><small>не влияет на остаток</small></button>';
   form.before(quick);
   const entryHeading = section.querySelector('.budget-entry-heading h2');
   if (entryHeading) entryHeading.textContent = 'Добавить запись';
@@ -1312,7 +1326,7 @@ function mountBudgetJourney() {
   list.before(ledgerHead);
   const tools = document.createElement('div');
   tools.className = 'budget-ledger-tools';
-  tools.innerHTML = '<select id="budgetLedgerFilter" aria-label="Показать операции"><option value="all">Все операции</option><option value="expense">Только расходы</option><option value="income">Только доходы</option><option value="transfer">Только переводы</option></select><input id="budgetLedgerSearch" style="grid-column:1 / -1" type="search" placeholder="Найти в журнале…" aria-label="Поиск по операциям" />';
+  tools.innerHTML = '<select id="budgetLedgerFilter" aria-label="Показать операции"><option value="all">Все операции</option><option value="expense">Только расходы</option><option value="income">Только доходы</option><option value="planned">Запланированные траты</option><option value="transfer">Только переводы</option></select><input id="budgetLedgerSearch" style="grid-column:1 / -1" type="search" placeholder="Найти в журнале…" aria-label="Поиск по операциям" />';
   list.before(tools);
   $('#budgetDateOrder').value = budgetDateOrder;
   $('#budgetDateOrder').addEventListener('change', event => {
@@ -1379,7 +1393,7 @@ function mountBudgetJourney() {
     const chart = $('#budgetChart');
     const legend = $('#chartLegend');
     const selectedCurrency = $('#budgetCurrencyFilter')?.value;
-    const parts = {};
+    const parts = Object.create(null);
     budgetChartExpenses(state.budget.transactions, selectedCurrency)
       .forEach(item => { parts[item.category] = (parts[item.category] || 0) + item.amount; });
     const segments = Object.entries(parts).map(([category, amount]) => ({ category, amount }));
@@ -1679,3 +1693,44 @@ function renderDailyInspiration() {
 const renderCloudStateWithInspiration = renderCloudState;
 renderCloudState = () => { renderCloudStateWithInspiration(); renderDailyInspiration(); };
 renderDailyInspiration();
+
+// Custom categories are part of the notebook, so save and sync use the same durable path.
+const categoryDialog = $('#budgetCategoryDialog');
+const categoryNameInput = $('#budgetCategoryName');
+const categoryError = $('#budgetCategoryError');
+let categoryDraftType = 'expense';
+$('#addBudgetCategory').addEventListener('click', () => {
+  categoryDraftType = transactionType.value;
+  $('#budgetCategoryTitle').textContent = categoryDraftType === 'income' ? 'Новая категория доходов' : 'Новая категория расходов';
+  categoryNameInput.value = '';
+  categoryError.textContent = '';
+  categoryDialog.showModal();
+  categoryNameInput.focus({preventScroll:true});
+});
+$('#cancelBudgetCategory').addEventListener('click', () => categoryDialog.close());
+$('#budgetCategoryForm').addEventListener('submit', event => {
+  event.preventDefault();
+  const name = categoryNameInput.value.trim().replace(/\s+/g, ' ');
+  if (!name) { categoryError.textContent = 'Введите название категории.'; return; }
+  if (name.length > 60) { categoryError.textContent = 'Название — до 60 символов.'; return; }
+  const kind = categoryDraftType === 'income' ? 'income' : 'expense';
+  const existing = budgetCategoriesFor(kind).find(value => value.toLocaleLowerCase('ru') === name.toLocaleLowerCase('ru'));
+  const previous = state.budget.customCategories;
+  if (!existing) {
+    const current = Array.isArray(previous?.[kind]) ? previous[kind] : [];
+    state.budget.customCategories = {...previous, [kind]:[...current, name]};
+    try { save(); }
+    catch (error) {
+      if (previous === undefined) delete state.budget.customCategories;
+      else state.budget.customCategories = previous;
+      categoryError.textContent = 'Не удалось сохранить категорию. Попробуйте ещё раз.';
+      return;
+    }
+  }
+  transactionType.value = categoryDraftType;
+  refreshTransactionForm();
+  transactionCategory.value = existing || name;
+  transactionCategory.dispatchEvent(new Event('change', {bubbles:true}));
+  renderBudget();
+  categoryDialog.close();
+});
