@@ -137,7 +137,7 @@
         <a class="wordmark" href="#top" aria-label="Night Notes, наверх">
           <span class="mark">N</span><span>night<br />notes</span>
         </a>
-        <button type="button" id="previousSection" class="section-arrow" aria-label="Предыдущий раздел">←</button>
+        
         <nav aria-label="Главное меню">
           <a class="nav-link active" data-view="today" href="#today"><span>01</span> Сегодня</a>
           <a class="nav-link" data-view="calendar" href="#calendar"><span>02</span> Календарь</a>
@@ -146,7 +146,7 @@
           <a class="nav-link" data-view="notes" href="#notes"><span>05</span> Заметки</a>
           <a class="nav-link" data-view="archive" href="#archive"><span>06</span> Архив</a>
         </nav>
-        <button type="button" id="nextSection" class="section-arrow" aria-label="Следующий раздел">→</button>
+        
         <div class="sidebar-bottom">
           <p class="mono">NEW YORK / FALL / 1985</p>
           <button id="themeToggle" class="text-button" aria-pressed="false" aria-label="Приглушить свет">◐ приглушить свет</button>
@@ -303,27 +303,56 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js?v=103"></script>
-    <script id="arrow-navigation">
+    <script id="section-swipe-navigation">
 (() => {
   const menu = document.querySelector('.sidebar nav');
+  const main = document.querySelector('main');
   const tabs = Array.from(menu.querySelectorAll('.nav-link[data-view]'));
-  const previous = document.getElementById('previousSection');
-  const next = document.getElementById('nextSection');
+  const mobile = window.matchMedia('(max-width:760px)');
+  let gesture = null;
   function update() {
-    const index = tabs.findIndex(tab => tab.classList.contains('active'));
-    previous.disabled = index <= 0;
-    next.disabled = index < 0 || index >= tabs.length - 1;
-    previous.title = index > 0 ? tabs[index - 1].textContent.trim() : 'Первый раздел';
-    next.title = index >= 0 && index < tabs.length - 1 ? tabs[index + 1].textContent.trim() : 'Последний раздел';
-    if (index < 0 || !window.matchMedia('(max-width:760px)').matches) return;
-    const tab = tabs[index];
+    const tab = tabs.find(tab => tab.classList.contains('active'));
+    if (!tab || !mobile.matches) return;
     const left = tab.offsetLeft - menu.offsetLeft;
     if (left < menu.scrollLeft) menu.scrollLeft = left;
-    else if (left + tab.offsetWidth > menu.scrollLeft + menu.clientWidth) menu.scrollLeft = left + tab.offsetWidth - menu.clientWidth;
+    else if (left + tab.offsetWidth > menu.scrollLeft + menu.clientWidth)
+      menu.scrollLeft = left + tab.offsetWidth - menu.clientWidth;
   }
-  function navigate(direction) {
-    const index = tabs.findIndex(tab => tab.classList.contains('active'));
-    const target = index < 0 ? null : tabs[index + direction];
+  function blocked(target) {
+    if (target.closest('input,textarea,select,button,a,label,summary,dialog,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="slider"]')) return true;
+    for (let el = target; el && el !== main; el = el.parentElement) {
+      const style = getComputedStyle(el);
+      if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(style.overflowX)) return true;
+    }
+    return false;
+  }
+  main.addEventListener('touchstart', event => {
+    gesture = null;
+    if (!mobile.matches || event.touches.length !== 1 || blocked(event.target) ||
+        document.activeElement?.matches('input,textarea,select,[contenteditable]:not([contenteditable="false"])')) return;
+    const touch = event.touches[0];
+    if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
+    gesture = { x:touch.clientX, y:touch.clientY, time:Date.now(),
+      view:tabs.findIndex(tab => tab.classList.contains('active')) };
+  }, {passive:true});
+  main.addEventListener('touchmove', event => {
+    if (!gesture) return;
+    if (event.touches.length !== 1) { gesture = null; return; }
+    const touch = event.touches[0];
+    if (Math.abs(touch.clientY - gesture.y) > 24) gesture = null;
+  }, {passive:true});
+  main.addEventListener('touchcancel', () => { gesture = null; }, {passive:true});
+  main.addEventListener('touchend', event => {
+    const start = gesture;
+    gesture = null;
+    if (!start || event.touches.length || event.changedTouches.length !== 1) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x, dy = touch.clientY - start.y;
+    const current = tabs.findIndex(tab => tab.classList.contains('active'));
+    if (Date.now() - start.time > 700 || Math.abs(dx) < 80 ||
+        Math.abs(dy) > 24 || Math.abs(dx) < Math.abs(dy) * 2 ||
+        current !== start.view || current < 0) return;
+    const target = tabs[current + (dx < 0 ? 1 : -1)];
     if (!target) return;
     const url = new URL(window.location.href);
     url.hash = target.dataset.view;
@@ -331,14 +360,12 @@
     activateView(target.dataset.view);
     window.scrollTo({top:0, behavior:'instant'});
     update();
-  }
-  previous.addEventListener('click', () => navigate(-1));
-  next.addEventListener('click', () => navigate(1));
+  }, {passive:true});
   new MutationObserver(update).observe(menu, {subtree:true, attributes:true, attributeFilter:['class']});
   window.addEventListener('hashchange', update);
   update();
 })();
-    </script>
+</script>
   </body>
 </html>
 
