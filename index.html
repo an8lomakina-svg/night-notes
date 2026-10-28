@@ -130,7 +130,15 @@
       }
     </style>
   <style id="visible-category-add">#budget #addBudgetCategory { flex:0 0 auto; width:auto; min-width:112px; min-height:44px; padding:0 10px; background:#f5e5cf; border-color:#c78a59; font-size:14px; font-weight:600; white-space:nowrap; } #budget #addBudgetCategory:focus-visible { outline:2px solid var(--orange); outline-offset:2px; }</style>
-  </head>
+  <style>
+#installRecovery:not([hidden]) { position:relative; margin:12px; padding:16px; border:1px solid #c78a59; background:#fffaf2; color:#493125; }
+#installRecovery p,.existing-notebook p { font-size:14px; line-height:1.5; }
+.existing-notebook { margin-top:20px; padding-top:16px; border-top:1px solid var(--line); }
+.existing-notebook label { display:block; font-size:14px; line-height:1.4; }
+.existing-notebook input { width:100%; min-height:44px; font-size:16px; margin:8px 0; }
+.existing-notebook button,#installRecovery button { min-height:44px; margin:4px 4px 4px 0; padding:8px 12px; border:1px solid #c78a59; border-radius:8px; background:#f5e5cf; color:#493125; }
+#syncDialog { max-height:calc(100dvh - 32px); overflow-y:auto; }
+</style></head>
   <body>
     <div class="grain"></div>
     <div class="app-shell">
@@ -234,6 +242,7 @@
       </main>
     </div>
     <template id="taskTemplate"><article class="task"><button class="checkbox" aria-label="Отметить выполненной"></button><span class="task-text"></span><button class="archive-action" aria-label="Архивировать задачу">В архив</button><button class="delete" aria-label="Удалить задачу">×</button></article></template>
+    <aside id="installRecovery" hidden role="status"><p>Блокнот с экрана «Домой» нужно подключить к твоим записям. Открой прежнюю приватную ссылку в Safari и скопируй её сюда.</p><button type="button" id="openInstallRecovery">Подключить мои записи</button></aside>
     <dialog id="syncDialog" class="sync-dialog">
       <form method="dialog" class="sync-dialog-card">
         <p class="eyebrow">ONE NOTEBOOK, EVERYWHERE</p>
@@ -246,7 +255,7 @@
         <p class="sync-email-note">Вход по email — альтернативный способ синхронизации. Подтверди вход из письма один раз в новом браузере.</p>
         <div class="sync-dialog-actions-primary"><button id="createShareLink" type="button" class="outline-button">Создать приватную ссылку</button></div>
         <input id="shareLink" class="share-link" type="url" readonly hidden aria-label="Приватная ссылка на блокнот" />
-        <p class="sync-privacy-note">Открой эту ссылку в другом браузере или на устройстве — там будет тот же блокнот. Не пересылай её: тот, у кого есть ссылка, сможет открыть твои записи.</p>
+        <div class="existing-notebook"><label for="existingNotebookLink">Уже есть блокнот? Вставь его приватную ссылку</label><input id="existingNotebookLink" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/?sync=…" /><button type="button" id="connectExistingNotebook">Подключить мои записи</button><button type="button" id="backupBeforeConnect">Скачать копию</button><p id="existingNotebookMessage" role="status" aria-live="polite"></p></div><p class="sync-privacy-note">Открой эту ссылку в другом браузере или на устройстве — там будет тот же блокнот. Не пересылай её: тот, у кого есть ссылка, сможет открыть твои записи.</p>
         <div class="sync-dialog-actions"><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
       </form>
     </dialog>
@@ -303,7 +312,7 @@
       })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=103"></script>
+    <script src="app.js?v=104"></script>
     <script id="section-swipe-navigation">
 (() => {
   const menu = document.querySelector('.sidebar nav');

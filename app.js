@@ -134,6 +134,24 @@ async function pushCloudState() {
 }
 
 const SHARED_SECRET_KEY = 'night-notes-shared-secret-v1';
+const INSTALL_COOKIE = 'night_notes_install_v1';
+const validSharedSecret = value => typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+function installSecret() {
+  const value = document.cookie.split(';').map(part => part.trim()).find(part => part.startsWith(INSTALL_COOKIE + '='))?.slice(INSTALL_COOKIE.length + 1);
+  return validSharedSecret(value) ? value : null;
+}
+function rememberInstallLink(secret) {
+  if (!validSharedSecret(secret)) return;
+  // iOS copies cookies at installation, but does not copy localStorage.
+  // Restrict the handoff credential to this app; never put it in the public manifest.
+  const path = new URL('.', window.location.href).pathname;
+  document.cookie = INSTALL_COOKIE + '=' + secret + '; Path=' + path + '; Max-Age=31536000; Secure; SameSite=Strict';
+  const url = new URL(window.location.href);
+  url.searchParams.set('sync', secret);
+  if (url.hash.includes('sync=')) url.hash = 'today';
+  history.replaceState(null, '', url);
+}
+
 const bytesToBase64 = bytes => btoa(String.fromCharCode(...bytes));
 const base64ToBytes = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
 const base64UrlEncode = bytes => bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
@@ -163,13 +181,14 @@ function sharedSecretFromLocation() {
   const querySecret = new URLSearchParams(window.location.search).get('sync');
   if (querySecret) return querySecret;
   const match = window.location.hash.match(/(?:^#|&)sync=([^&]+)/);
-  return match ? decodeURIComponent(match[1]) : localStorage.getItem(SHARED_SECRET_KEY);
+  return match ? decodeURIComponent(match[1]) : localStorage.getItem(SHARED_SECRET_KEY) || installSecret();
 }
 async function ensureSharedSync() {
   if (!cloudClient) return null;
   if (!sharedSync) {
     const secret = sharedSecretFromLocation() || newSharedSecret();
     localStorage.setItem(SHARED_SECRET_KEY, secret);
+    rememberInstallLink(secret);
     sharedSync = { secret, id: await sharedId(secret) };
   }
   return sharedSync;
@@ -1131,7 +1150,7 @@ function hasNotebookEntries(source) {
   const focus = String(source?.focus || '').trim().length;
   const defaultPlans = ['Увидеть осенний Нью-Йорк', 'Собрать блокнот под себя'];
   const plans = Object.values(source?.plans || {}).reduce((count, list) => count + (Array.isArray(list) ? list.filter(item => !defaultPlans.includes(item)).length : 0), 0);
-  return budget + events + imports + shopping + health + archive + customTasks + focus + plans > 0;
+  return budget + events + imports + shopping + health + archive + customTasks + focus + plans + (source?.notes?.length || 0) > 0;
 }
 
 async function hydrateCloudState() {
@@ -1180,7 +1199,7 @@ async function initCloudSync() {
   if (syncSignOut) syncSignOut.hidden = !cloudUser;
   if (cloudUser) {
     await hydrateCloudState();
-  } else if (new URLSearchParams(window.location.search).has('sync') || window.location.hash.includes('sync=') || localStorage.getItem(SHARED_SECRET_KEY)) {
+  } else if (sharedSecretFromLocation()) {
     // Keep old private-link notebooks working, but do not create a new
     // anonymous notebook for a fresh home-screen installation.
     await ensureSharedSync();
@@ -1292,8 +1311,59 @@ syncSignOut?.addEventListener('click', async () => {
   syncDialog?.close();
 });
 
+
+function showInstallRecovery() {
+  const banner = $('#installRecovery');
+  if (!banner) return;
+  const standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+  banner.hidden = !standalone || !!cloudUser || !!sharedSecretFromLocation();
+}
+$('#openInstallRecovery')?.addEventListener('click', () => {
+  $('#syncAccount').click();
+  $('#existingNotebookLink').focus({preventScroll:true});
+});
+$('#connectExistingNotebook')?.addEventListener('click', async () => {
+  const button = $('#connectExistingNotebook'), message = $('#existingNotebookMessage');
+  let link, secret;
+  try {
+    link = new URL($('#existingNotebookLink').value.trim());
+    secret = link.searchParams.get('sync') || new URLSearchParams(link.hash.slice(1)).get('sync');
+    if (link.origin !== location.origin || !['', 'index.html'].includes(link.pathname.slice(new URL('.', location.href).pathname.length)) ||
+        !link.pathname.startsWith(new URL('.', location.href).pathname) || !validSharedSecret(secret)) throw new Error();
+  } catch { message.textContent = 'Вставь приватную ссылку на этот блокнот с параметром sync.'; return; }
+  if (!cloudClient) { message.textContent = 'Синхронизация ещё недоступна. Проверь интернет и повтори.'; return; }
+  if (cloudUser || sharedHydrating || cloudHydrating || sharedPushPromise || cloudPushPromise) {
+    message.textContent = 'Дождись завершения синхронизации. Если выполнен вход по email, сначала выйди из него.'; return;
+  }
+  if (hasNotebookEntries(state) || pendingSync) {
+    message.textContent = 'Здесь уже есть записи. Чтобы не заменить их, подключение остановлено. Сначала сохрани резервную копию кнопкой «Скачать копию».';
+    return;
+  }
+  button.disabled = true;
+  message.textContent = 'Проверяю ссылку и загружаю записи…';
+  const revision = localRevision;
+  try {
+    const {data,error} = await cloudClient.rpc('get_shared_notebook', {p_sync_id:await sharedId(secret)});
+    if (error || !data) throw new Error('missing');
+    const remote = await decryptSharedState(secret, data);
+    if (!remote || !Array.isArray(remote.budget?.transactions)) throw new Error('invalid');
+    // Never connect by uploading an empty installation over an existing notebook.
+    if (localRevision !== revision || pendingSync || hasNotebookEntries(state) || cloudUser) throw new Error('local_changes');
+    localStorage.setItem('night-notes-v1', JSON.stringify(remote));
+    localStorage.setItem(SHARED_SECRET_KEY, secret);
+    rememberSyncTarget('shared:' + secret);
+    rememberInstallLink(secret);
+    location.reload();
+  } catch {
+    message.textContent = 'Подключить не удалось. Проверь ссылку и интернет. Если здесь появились записи, сначала скачай их копию. Данные в облаке не изменены.';
+  } finally { button.disabled = false; }
+});
+$('#backupBeforeConnect')?.addEventListener('click', downloadBackup);
+$('main').prepend($('#installRecovery'));
+showInstallRecovery();
+
 setTimeout(mountBudgetJourney, 0);
-initCloudSync();
+initCloudSync().finally(showInstallRecovery);
 
 // Budget journey: start with an intent, then keep the long journal easy to scan.
 function mountBudgetJourney() {
