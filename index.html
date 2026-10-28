@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5eddf" />
     <meta name="description" content="Night Notes — личный блокнот для планов, списков и календаря." />
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=4" />
@@ -82,6 +82,53 @@
     </style>
     <title>Night Notes</title>
   <style id="separate-shopping-budget">.section-purpose { max-width:36em; margin:16px 0 0; color:var(--muted); font-size:14px; line-height:1.5; }</style>
+  
+    <style id="phone-workspace">
+      @media (max-width:760px) {
+        body { min-height:100svh; }
+        .app-shell, main, .view { min-width:0; }
+        main { padding:0 max(12px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+        .sidebar { width:100%; height:auto; min-height:60px; padding:calc(8px + env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left)); flex-direction:row; }
+        .sidebar nav { height:44px; padding:0 !important; scrollbar-width:none; }
+        .sidebar nav::-webkit-scrollbar { display:none; }
+        .sidebar .nav-link { flex:0 0 auto; min-width:88px; min-height:44px; padding:7px 10px; font-size:13px; white-space:nowrap; }
+        .sidebar .nav-link span { display:none; }
+        .section-arrow { flex-basis:44px; width:44px; margin:0; }
+        .sidebar .top-actions { padding:0; }
+        .mobile-more > summary { width:44px; height:44px; }
+        .page-heading, #budget .page-heading, #calendar .calendar-heading { padding:24px 0 20px; }
+        .page-heading h1, #budget .page-heading h1, #calendar .calendar-heading h1,
+        .daily-inspiration h1 { font-size:clamp(34px,9vw,42px); line-height:1.05; }
+        .daily-inspiration { padding-top:24px; }
+        .daily-inspiration > header { margin-bottom:16px; }
+        .daily-art-frame { min-height:0; }
+        .daily-art-frame img { height:auto; object-fit:contain; }
+        .daily-inspiration figcaption { padding:20px 16px; }
+        .utility-card, #budget .utility-card { min-width:0; padding:14px; }
+        input, select, textarea, [contenteditable="true"] { font-size:16px !important; max-width:100%; scroll-margin-top:calc(76px + env(safe-area-inset-top)); }
+        input, select { min-height:44px; }
+        .add-row, .shopping-create-form { min-width:0; }
+        .add-row input, .shopping-create-form input { min-width:0; width:100%; }
+        .shopping-checklist .utility-heading { flex-wrap:wrap; gap:10px; }
+        .shopping-checklist-actions { flex-wrap:wrap; }
+        .shopping-checklist-actions button { min-height:44px; padding-inline:6px; }
+        .shopping-item { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; gap:6px; padding:8px 0; }
+        .shopping-item .checkbox, .shopping-item .delete { width:44px; height:44px; }
+        .shopping-item .shopping-item-input { width:100%; }
+        .shopping-item .archive-action { grid-column:2; grid-row:2; justify-self:start; min-height:44px; }
+        .shopping-item .delete { grid-column:3; grid-row:1; }
+        #budget .transaction { grid-template-columns:minmax(0,1fr) 44px; gap:6px; }
+        #budget .transaction > div { grid-column:1; min-width:0; overflow-wrap:anywhere; }
+        #budget .transaction > span { grid-column:1; grid-row:2; white-space:normal; overflow-wrap:anywhere; font-size:15px; }
+        #budget .transaction > .delete { grid-column:2; grid-row:1 / span 2; width:44px; min-height:44px; }
+        #budget .transaction strong { font-size:15px; }
+        #budget .transaction small { font-size:12px; }
+        #budget .transaction-account { max-width:100%; }
+        #budget .transaction-edit-action { min-height:44px; }
+        .budget-summary > div, .budget-insight { min-width:0; overflow-wrap:anywhere; }
+        .note-compose textarea { min-height:180px; }
+      }
+    </style>
   </head>
   <body>
     <div class="grain"></div>
@@ -229,8 +276,8 @@
         function arrange() {
           more.open = false;
           if (media.matches) {
-            panel.append(chat, profile);
-            actions.append(radio, more);
+            panel.append(chat, radio, profile);
+            actions.append(more);
             sidebar.append(actions);
           } else {
             actions.append(chat, radio, profile);
