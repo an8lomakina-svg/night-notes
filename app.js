@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 // Google Finance quotes: units of each currency per 1 EUR. Quote dates are explicit.
-const generalChartRates = { EUR: 1, RSD: 117.5, RUB: 91.3471, AMD: 407 };
+const generalChartRates = { EUR: 1, RSD: 117.518516, RUB: 91.064623, AMD: 404.78625 };
 const generalChartQuoteDates = { RSD: '23.10.2026', RUB: '24.10.2026', AMD: '16.10.2026' };
 function budgetChartIncludes(item, selected) {
   return item.type === 'expense' && (selected === 'ALL' || (item.currency || 'RUB') === selected);
@@ -19,8 +19,8 @@ function renderGeneralChartNote(selected) {
     $('#budgetCurrencyFilter').closest('.utility-heading').after(note);
   }
   note.hidden = selected !== 'ALL';
-  note.textContent = 'Все расходы в EUR · сохранённые котировки Google Finance. 1 € = ' +
-    ['RSD', 'RUB', 'AMD'].map(code => `${generalChartRates[code]} ${code} (${generalChartQuoteDates[code]})`).join(' · ');
+  note.textContent = 'Все расходы в EUR · тот же курс, что в итогах бюджета. 1 € = ' +
+    ['RSD', 'RUB', 'AMD'].map(code => `${generalChartRates[code]} ${code}`).join(' · ');
 }
 
 let startupStorageError = false;
@@ -127,6 +127,7 @@ function acknowledgeSync(target, revision) {
 }
 const save = () => {
   if (startupStorageError) throw new Error('recovery_required');
+  if(hasOtherPendingSync(syncTarget())) { setSyncStatus('На устройстве есть неотправленные изменения другого блокнота'); throw new Error('different_notebook'); }
   const priorMeta=state._sync;
   state._sync={version:1,deleted:NotebookSync.deletions(lastSavedState,state,state._sync?.deleted)};
   const nextPending = {target:syncTarget(), revision:localRevision + 1};
@@ -498,9 +499,9 @@ function loadGoogleIdentity() {
   });
 }
 function allEvents(key) { return [
-  ...(state.events[key] || []).filter(event => !event.googleId || !state.hiddenGoogleEvents.includes(event.googleId)).map((event, index) => ({ ...event, source: event.googleId ? 'google' : 'local', index })),
+  ...(state.events[key] || []).map((event,index)=>({...event,source:event.googleId?'google':'local',index})).filter(event=>!event.googleId || !state.hiddenGoogleEvents.includes(event.googleId)),
   ...state.imports.map((event, index) => event.date === key ? { ...event, source: 'import', index } : null).filter(Boolean)
-] }
+].sort((a,b)=>(a.time==='ВЕСЬ ДЕНЬ'?'':a.time||'').localeCompare(b.time==='ВЕСЬ ДЕНЬ'?'':b.time||'')) }
 function renderCalendar(){ const y=month.getFullYear(),m=month.getMonth();$('#monthTitle').textContent=new Intl.DateTimeFormat('ru-RU',{month:'long',year:'numeric'}).format(month);const grid=$('#calendarGrid');grid.innerHTML=''; const start=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(); for(let i=0;i<start;i++){let e=document.createElement('span');e.className='day empty';grid.append(e)} for(let d=1;d<=days;d++){const date=new Date(y,m,d),k=dateKey(date),count=allEvents(k).length,b=document.createElement('button');b.className='day'+(dateKey(new Date())===k?' today':'')+(dateKey(selectedDate)===k?' selected':'')+(count?' has-event':'');b.textContent=d;b.setAttribute('aria-label',`${niceDate(date)}${count ? `, событий: ${count}` : ''}`);b.onclick=()=>{selectedDate=date;renderCalendar();renderAgenda()};grid.append(b)} renderAgenda();}
 function promptEventChange(event) {
   const title = prompt('Название события:', event.title);
@@ -548,8 +549,8 @@ function archiveCalendarEvent(event, date) {
   }
   save(); renderCalendar();
 }
-function renderAgenda(){const k=dateKey(selectedDate), events=allEvents(k);$('#agendaLabel').textContent=niceDate(selectedDate).toUpperCase();$('#agendaTitle').textContent=dateKey(selectedDate)===dateKey(new Date())?'Сегодня':'На этот день';const box=$('#agendaItems');box.innerHTML=events.length?'':'<p class="empty">Пока здесь свободно. В этом тоже есть свой ритм.</p>';events.forEach(e=>{const x=document.createElement('div');x.className='event';x.innerHTML=`<span class="event-time">${e.time||'ВЕСЬ ДЕНЬ'}</span><span class="event-title"></span><span class="event-actions"><button class="event-edit" type="button">Изменить</button>${e.googleId ? '<span class="event-source">Google</span>' : ''}<button class="archive-action" type="button" aria-label="Архивировать событие">В архив</button><button class="delete" type="button" aria-label="Удалить событие">×</button></span>`;x.querySelector('.event-title').textContent=e.title;x.querySelector('.event-edit').onclick=()=>updateCalendarEvent(e,k);x.querySelector('.archive-action').onclick=()=>archiveCalendarEvent(e,k);x.querySelector('.delete').onclick=()=>deleteCalendarEvent(e,k);box.append(x)})}
-$('#prevMonth').onclick=()=>{month.setMonth(month.getMonth()-1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#nextMonth').onclick=()=>{month.setMonth(month.getMonth()+1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#calendarToday').onclick=()=>{selectedDate=new Date();selectedDate.setHours(0,0,0,0);month=new Date(selectedDate);renderCalendar();refreshGoogleEvents().catch(showGoogleError)}; $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const x=$('#eventInput'),time=$('#eventTime');if(!x.value.trim())return;const k=dateKey(selectedDate);const event={title:x.value.trim(),time:time.value||'ВЕСЬ ДЕНЬ'};try{if(isGoogleConnected()){const created=await googleApi('/calendars/primary/events',{method:'POST',body:JSON.stringify(googleEventPayload(event.title,k,event.time))});event.googleId=created.id;event.googleUpdated=created.updated||new Date().toISOString()}(state.events[k]??=[]).push(event);x.value='';time.value='';save();await refreshGoogleEvents();renderCalendar()}catch(error){showGoogleError(error)}});
+function renderAgenda(){const k=dateKey(selectedDate), events=allEvents(k);$('#agendaLabel').textContent=niceDate(selectedDate).toUpperCase();$('#agendaTitle').textContent=dateKey(selectedDate)===dateKey(new Date())?'Сегодня':'На этот день';const box=$('#agendaItems');box.innerHTML=events.length?'':'<p class="empty">Пока здесь свободно. В этом тоже есть свой ритм.</p>';events.forEach(e=>{const x=document.createElement('div');x.className='event';x.innerHTML=`<span class="event-time">${escapeBudgetCategory(e.time||'ВЕСЬ ДЕНЬ')}</span><span class="event-title"></span><span class="event-actions"><button class="event-edit" type="button">Изменить</button>${e.googleId ? '<span class="event-source">Google</span>' : ''}<button class="archive-action" type="button" aria-label="Архивировать событие">В архив</button><button class="delete" type="button" aria-label="Удалить событие">×</button></span>`;x.querySelector('.event-title').textContent=e.title;x.querySelector('.event-edit').onclick=()=>updateCalendarEvent(e,k);x.querySelector('.archive-action').onclick=()=>archiveCalendarEvent(e,k);x.querySelector('.delete').onclick=()=>deleteCalendarEvent(e,k);box.append(x)})}
+$('#prevMonth').onclick=()=>{month.setDate(1);month.setMonth(month.getMonth()-1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#nextMonth').onclick=()=>{month.setDate(1);month.setMonth(month.getMonth()+1);renderCalendar();refreshGoogleEvents().catch(showGoogleError)};$('#calendarToday').onclick=()=>{selectedDate=new Date();selectedDate.setHours(0,0,0,0);month=new Date(selectedDate);renderCalendar();refreshGoogleEvents().catch(showGoogleError)}; $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const x=$('#eventInput'),time=$('#eventTime');if(!x.value.trim())return;const k=dateKey(selectedDate);const event={title:x.value.trim(),time:time.value||'ВЕСЬ ДЕНЬ'};try{if(isGoogleConnected()){const created=await googleApi('/calendars/primary/events',{method:'POST',body:JSON.stringify(googleEventPayload(event.title,k,event.time))});event.googleId=created.id;event.googleUpdated=created.updated||new Date().toISOString()}(state.events[k]??=[]).push(event);try{save()}catch(error){state.events[k]=state.events[k].filter(item=>item!==event);setSyncStatus('Не удалось сохранить событие · текст остался в форме');throw error;}x.value='';time.value='';await refreshGoogleEvents();renderCalendar()}catch(error){showGoogleError(error)}});
 connectGoogleCalendar?.addEventListener('click', async () => {
   const clientId = clientIdInput?.value.trim();
   if (!clientId) { setGoogleStatus('Введите OAuth Client ID из Google Cloud.', true); return; }
@@ -671,7 +672,7 @@ if (state.budget.categorySchema !== '2026-10-v3') {
   state.budget.categorySchema = '2026-10-v3';
   if (!startupStorageError && !damagedNotebook) localStorage.setItem('night-notes-v1', JSON.stringify(state));
 }
-const currency = (n, code='RSD') => new Intl.NumberFormat('ru-RU',{style:'currency',currency:code,maximumFractionDigits:code==='EUR'?2:0}).format(n||0);
+const currency = (n, code='RSD') => new Intl.NumberFormat('ru-RU',{style:'currency',currency:code,maximumFractionDigits:2}).format(n||0);
 function removeItem(list, id){ const i=list.findIndex(x=>x.id===id); if(i>-1) list.splice(i,1); save(); }
 const activeShoppingList=()=>state.shoppingLists.find(list=>list.id===state.activeShoppingListId)||state.shoppingLists[0];
 function renderShopping(){
@@ -1253,7 +1254,7 @@ renderBudget = () => {
     const editor = document.createElement('form');
     editor.className = 'transaction-editor';
     const categories = categoryListFor(item);
-    editor.innerHTML = `<label>Тип<select name="type" aria-label="Тип операции"><option value="expense"${item.type === 'expense' ? ' selected' : ''}>Расход</option><option value="income"${item.type === 'income' ? ' selected' : ''}>Доход</option><option value="planned"${item.type === 'planned' ? ' selected' : ''}>Запланированная трата</option>${item.type === 'transfer' ? '<option value="transfer" selected>Перевод</option>' : ''}</select></label><label>Валюта<select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select></label><label class="transaction-edit-wide">Название<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"></label><label>Сумма<input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"></label><label>Дата<input name="date" aria-label="Дата операции" type="date" value="${item.date || ''}"></label><label class="transaction-edit-wide">Счёт<select name="account" aria-label="Счёт операции"><option value="">Без счёта</option>${budgetAccounts.map(account => `<option value="${account.id}"${item.account === account.id ? ' selected' : ''}>${account.label}</option>`).join('')}</select></label><label class="transaction-edit-wide">Категория<select name="category" aria-label="Категория операции"></select></label><label class="transaction-edit-wide">Комментарий<textarea name="comment" aria-label="Комментарий к операции" rows="2" placeholder="Необязательно">${escapeOption(item.comment || '')}</textarea></label><button type="submit">Сохранить изменения</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
+    editor.innerHTML = `<label>Тип<select name="type" aria-label="Тип операции"><option value="expense"${item.type === 'expense' ? ' selected' : ''}>Расход</option><option value="income"${item.type === 'income' ? ' selected' : ''}>Доход</option><option value="planned"${item.type === 'planned' ? ' selected' : ''}>Запланированная трата</option>${item.type === 'transfer' ? '<option value="transfer" selected>Перевод</option>' : ''}</select></label><label>Валюта<select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select></label><label class="transaction-edit-wide">Название<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"></label><label>Сумма<input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"></label><label>Дата<input name="date" aria-label="Дата операции" type="date" required value="${item.date || ''}"></label><label class="transaction-edit-wide">Счёт<select name="account" aria-label="Счёт операции"><option value="">Без счёта</option>${budgetAccounts.map(account => `<option value="${account.id}"${item.account === account.id ? ' selected' : ''}>${account.label}</option>`).join('')}</select></label><label class="transaction-edit-wide">Категория<select name="category" aria-label="Категория операции"></select></label><label class="transaction-edit-wide">Комментарий<textarea name="comment" aria-label="Комментарий к операции" rows="2" placeholder="Необязательно">${escapeOption(item.comment || '')}</textarea></label><button type="submit">Сохранить изменения</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
     const typeField = editor.querySelector('[name="type"]');
     const categoryField = editor.querySelector('[name="category"]');
     const setCategories = (selectedCategory = item.category) => {
@@ -1269,7 +1270,8 @@ renderBudget = () => {
       const data = new FormData(editor);
       const amount = Number(data.get('amount'));
       const name = String(data.get('name') || '').trim();
-      if (!name || !Number.isFinite(amount) || amount <= 0) return;
+      if (!name || !Number.isFinite(amount) || amount <= 0 || !editor.checkValidity()) { editor.reportValidity(); return; }
+      const previous = {...item};
       item.name = name;
       item.amount = amount;
       item.type = String(data.get('type'));
@@ -1278,7 +1280,7 @@ renderBudget = () => {
       item.account = String(data.get('account'));
       item.category = String(data.get('category'));
       item.comment = String(data.get('comment') || '').trim();
-      save();
+      try { save(); } catch { Object.assign(item,previous);setSyncStatus('Не удалось сохранить изменения · данные остались в форме');return; }
       renderBudget();
     };
     copy.append(edit, editor);
@@ -1302,6 +1304,7 @@ function renderBudgetEuroOverview() {
   const total = type => state.budget.transactions
     .filter(item => item.type === type)
     .reduce((sum, item) => sum + item.amount / (budgetEurRates[item.currency || 'RUB'] || 1), 0);
+  Object.assign(generalChartRates,budgetEurRates);
   const income = total('income');
   const expense = total('expense');
   $('#incomeTotal').textContent = currency(income, 'EUR');
@@ -1310,7 +1313,7 @@ function renderBudgetEuroOverview() {
 
 }
 const renderBudgetWithEuroOverview = renderBudget;
-renderBudget = () => { renderBudgetWithEuroOverview(); renderBudgetEuroOverview(); };
+renderBudget = () => { Object.assign(generalChartRates,budgetEurRates);renderBudgetWithEuroOverview(); renderBudgetEuroOverview(); };
 async function refreshBudgetEurRates() {
   try {
     const response = await fetch('https://open.er-api.com/v6/latest/EUR', { cache: 'no-store' });
@@ -1908,6 +1911,7 @@ $('#noteForm')?.addEventListener('submit', event => {
   const title = $('#noteTitle'), body = $('#noteBody');
   if (!title.value.trim() && !body.value.trim()) return;
   state.notes ??= [];
+  const previousNotes=NotebookSync.clone(state.notes);
   const current = editingNoteId ? state.notes.find(note => note.id === editingNoteId) : null;
   if (current) {
     current.title = title.value.trim();
@@ -1916,7 +1920,7 @@ $('#noteForm')?.addEventListener('submit', event => {
   } else {
     state.notes.unshift({ id:`note-${Date.now()}-${Math.random().toString(16).slice(2)}`, title:title.value.trim(), body:body.value.trim(), updatedAt:Date.now() });
   }
-  save(); renderNotes(); resetNoteEditor();
+  try { save(); } catch {state.notes=previousNotes;setSyncStatus('Не удалось сохранить заметку · текст остался в форме');return;} renderNotes(); resetNoteEditor();
 });
 document.querySelectorAll('[data-note-marker]').forEach(button => button.addEventListener('click', () => insertNoteMarker(button.dataset.noteMarker)));
 $('#noteCancel')?.addEventListener('click', resetNoteEditor);
@@ -2010,7 +2014,8 @@ function renderDailyInspiration() {
   // Yesterday's complete card is preserved in the shared, main archive once a new day starts.
   const archiveChanged = archivePastInspiration(key);
   if ((changed || archiveStartChanged || removedBeforeStart || archiveChanged) && !startupStorageError && !damagedNotebook) {
-    try { save(); } catch { localStorage.setItem('night-notes-v1', JSON.stringify(state)); }
+    // Generated artwork must not turn a read into an upload or overwrite another notebook's pending marker.
+    if (archiveChanged || removedBeforeStart) { try { save(); } catch { setSyncStatus('Не удалось сохранить архив · попробуй ещё раз'); } }
   }
   if (archiveChanged || removedBeforeStart) renderArchive();
   $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
@@ -2114,3 +2119,4 @@ $('#downloadPreviousCopy')?.addEventListener('click',()=>{
     downloadJson({format:BACKUP_FORMAT,state:copies[0].state || copies[0]},'night-notes-previous.json');
   }catch{$('#backupMessage').textContent='Не удалось прочитать предыдущую копию.';}
 });
+

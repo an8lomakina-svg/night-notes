@@ -78,7 +78,7 @@
     if (!object(state) || !object(state.budget) || !Array.isArray(state.budget.transactions) || !object(state.events)) return false;
     for(const name of ['tasks','imports','archive','notes','shoppingLists']) if(state[name] !== undefined && !Array.isArray(state[name])) return false;
     if (state.budget.transactions.some(t=>!object(t)||!Number.isFinite(t.amount)||t.amount<0||typeof t.name!=='string')) return false;
-    if(Object.values(state.events).some(day=>!Array.isArray(day) || day.some(e=>!object(e)||typeof e.title!=='string')))return false;
+    if(Object.values(state.events).some(day=>!Array.isArray(day) || day.some(e=>!object(e)||typeof e.title!=='string'||(e.time!==undefined && e.time!=='' && e.time!=='ВЕСЬ ДЕНЬ' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(e.time)))))return false;
     if(state.shoppingLists?.some(list=>!object(list)||!Array.isArray(list.items)||list.items.some(item=>!object(item)||typeof item.text!=='string')))return false;
     if(state.notes?.some(note=>!object(note)||(note.updatedAt && !Number.isFinite(new Date(note.updatedAt).getTime()))))return false;
     if(state.plans && (!object(state.plans)||Object.values(state.plans).some(list=>!Array.isArray(list))))return false;
@@ -89,3 +89,4 @@
   if(typeof module==='object' && module.exports) module.exports=api;
   else root.NotebookSync=api;
 })(typeof globalThis==='object'?globalThis:this);
+
