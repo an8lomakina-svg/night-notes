@@ -1961,6 +1961,15 @@ function normalizeInspirationArchive() {
   state.inspirationArchive = [...byDate.values()].sort((a,b) => String(b.date).localeCompare(String(a.date)));
   state.inspirationArchive.forEach(item => Object.assign(item, { date:item.date, ...inspirationCatalog[dailyInspirationIndex(item.date)] }));
 }
+function ensureYesterdayInspiration(today) {
+  const previous = new Date(`${today}T12:00:00`);
+  previous.setDate(previous.getDate() - 1);
+  const previousKey = dateKey(previous);
+  if (state.inspirationArchive.some(item => item.date === previousKey)) return false;
+  state.inspirationArchive.push({ date:previousKey, archivedAt:new Date(`${previousKey}T12:00:00`).toISOString(), ...inspirationCatalog[dailyInspirationIndex(previousKey)] });
+  normalizeInspirationArchive();
+  return true;
+}
 function archivePastInspiration(today) {
   state.archive ??= [];
   let changed = false;
@@ -1996,9 +2005,11 @@ function renderDailyInspiration() {
     Object.assign(entry, { date:key, ...dailyArtwork });
     changed = changed || before !== JSON.stringify(entry);
   }
+  // Ensure the previous day's completed card is retained even if the older version only kept it on the start page.
+  const restoredYesterday = ensureYesterdayInspiration(key);
   // Yesterday's complete card is preserved in the shared, main archive once a new day starts.
   const archiveChanged = archivePastInspiration(key);
-  if ((changed || archiveChanged) && !startupStorageError && !damagedNotebook) {
+  if ((changed || restoredYesterday || archiveChanged) && !startupStorageError && !damagedNotebook) {
     try { save(); } catch { localStorage.setItem('night-notes-v1', JSON.stringify(state)); }
   }
   if (archiveChanged) renderArchive();
