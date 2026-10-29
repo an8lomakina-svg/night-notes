@@ -872,9 +872,14 @@ function extractReceiptTransactions(text) {
   lines.forEach((line, index) => {
     const found = receiptAmountFromLine(line);
     if (!found) return;
-    const context = [lines[index - 1] || '', line, lines[index + 1] || ''].join(' ');
+    const previous = lines[index - 1] || '';
+    const next = lines[index + 1] || '';
+    const context = [previous, line, next].join(' ');
     const type = receiptDirection(context, found.negative);
-    const time = context.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/)?.[0] || '';
+    // Bank screens often put date and time directly below an operation; do not steal it from the preceding row.
+    const dateSource = [line, next, previous].find(part => receiptDate(part, '')) || '';
+    const timeSource = [line, next, previous].find(part => /\b([01]?\d|2[0-3]):[0-5]\d\b/.test(part)) || '';
+    const time = timeSource.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/)?.[0] || '';
     result.push({
       id: `receipt-${Date.now()}-${index}`,
       selected: true,
@@ -883,7 +888,7 @@ function extractReceiptTransactions(text) {
       currency: found.currency,
       type,
       category: receiptCategory(context, type),
-      date: receiptDate(context, fallbackDate),
+      date: receiptDate(dateSource, fallbackDate),
       time,
       source: line
     });
