@@ -588,7 +588,40 @@ $('#icsInput').onchange=async event=>{
   input.value='';
 };
 function restoreArchive(entry){const payload=entry.payload||{};if(entry.source==='task')state.tasks.push(payload);if(entry.source==='plan')state.plans[payload.key].push(payload.text);if(entry.source==='focus'){state.focus=payload.text||entry.text;$('#focusInput').value=state.focus}if(entry.source==='event'){(state.events[payload.date]??=[]).push({title:payload.title,time:payload.time})}if(entry.source==='google-event')state.hiddenGoogleEvents=state.hiddenGoogleEvents.filter(id=>id!==payload.googleId);if(entry.source==='calendar-import')state.imports.push(payload.item);if(entry.source==='shopping-item'){const list=state.shoppingLists.find(x=>x.id===payload.listId)||{id:payload.listId||Date.now(),name:payload.listName||'Мой список',items:[]};if(!state.shoppingLists.includes(list))state.shoppingLists.push(list);list.items.push(payload.item)}if(entry.source==='shopping-list'){state.shoppingLists.push(payload.list)}if(entry.source==='budget')state.budget.transactions.push(payload.item);if(entry.source==='health')state.health[payload.kind].push(payload.item);state.archive=state.archive.filter(x=>x.id!==entry.id);save();renderTasks();renderPlans();renderCalendar();renderShopping();renderBudget();renderHealth('done');renderHealth('todo')}
-function renderArchive(){const entries=state.archive;const b=$('#archiveList');b.innerHTML=entries.length?'':'<p class="empty">Здесь появятся записи, которые ты отправишь в архив.</p>';entries.forEach(entry=>{const el=document.createElement('article');el.className='archive-entry';const date=entry.archivedAt?new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'short'}).format(new Date(entry.archivedAt)).toUpperCase():'АРХИВ';el.innerHTML=`<time>${entry.type} · ${date}</time><p></p><div class="archive-actions"><button class="restore-action" type="button">Вернуть</button><button class="delete" type="button" aria-label="Удалить запись из архива">×</button></div>`;el.querySelector('p').textContent=entry.text;el.querySelector('.restore-action').onclick=()=>restoreArchive(entry);el.querySelector('.delete').onclick=()=>{state.archive=state.archive.filter(x=>x.id!==entry.id);save()};b.append(el)})} renderArchive();
+function renderArchive(){
+  const entries = state.archive || [];
+  const b = $('#archiveList');
+  b.innerHTML = entries.length ? '' : '<p class="empty">Здесь появятся записи и ежедневное вдохновение из прошлых дней.</p>';
+  entries.forEach(entry => {
+    const el = document.createElement('article');
+    const date = entry.archivedAt ? new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'short'}).format(new Date(entry.archivedAt)).toUpperCase() : 'АРХИВ';
+    if (entry.source === 'daily-inspiration') {
+      const card = entry.payload || {};
+      el.className = 'archive-entry archive-inspiration-card';
+      el.innerHTML = '<div class="archive-inspiration-head"><time></time><button class="delete" type="button" aria-label="Удалить вдохновение из архива">×</button></div><div class="archive-inspiration-grid"><img alt="" /><div><p class="archive-inspiration-title"></p><p class="archive-inspiration-artist"></p><p class="archive-inspiration-info"></p><a target="_blank" rel="noopener">Справка о картине ↗</a><blockquote></blockquote><p class="archive-inspiration-author"></p></div></div>';
+      el.querySelector('time').textContent = `ВДОХНОВЕНИЕ · ${date}`;
+      const image = el.querySelector('img');
+      image.src = card.image || 'assets-central-park-daylight.png';
+      image.alt = card.title ? `${card.title} — ${card.artist || ''}` : 'Картина дня';
+      image.onerror = () => { image.onerror = null; image.src = 'assets-central-park-daylight.png'; };
+      el.querySelector('.archive-inspiration-title').textContent = card.title || entry.text;
+      el.querySelector('.archive-inspiration-artist').textContent = card.artist || '';
+      el.querySelector('.archive-inspiration-info').textContent = card.info || '';
+      const source = el.querySelector('a');
+      source.href = card.source || '#';
+      source.hidden = !card.source;
+      el.querySelector('blockquote').textContent = card.quote ? `«${card.quote}»` : '';
+      el.querySelector('.archive-inspiration-author').textContent = card.author ? `— ${card.author}` : '';
+    } else {
+      el.className = 'archive-entry';
+      el.innerHTML = `<time>${entry.type} · ${date}</time><p></p><div class="archive-actions"><button class="restore-action" type="button">Вернуть</button><button class="delete" type="button" aria-label="Удалить запись из архива">×</button></div>`;
+      el.querySelector('p').textContent = entry.text;
+      el.querySelector('.restore-action').onclick = () => restoreArchive(entry);
+    }
+    el.querySelector('.delete').onclick = () => { state.archive = state.archive.filter(item => item.id !== entry.id); save(); renderArchive(); };
+    b.append(el);
+  });
+} renderArchive();
 const setHint=(x)=>{const h=$('#voiceHint');h.hidden=!x;h.textContent=x}; const SR=window.SpeechRecognition||window.webkitSpeechRecognition; $('#voiceTask').onclick=async()=>{if(!window.isSecureContext){setHint('Голосовой ввод работает в опубликованном блокноте по HTTPS — открой ссылку GitHub Pages.');return}if(!SR){setHint('Этот браузер не поддерживает голосовой ввод. Открой блокнот в Chrome или Safari и нажми значок микрофона в поле.');return}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(track=>track.stop())}catch{setHint('Разреши доступ к микрофону для этого сайта — затем нажми кнопку ещё раз.');return}const r=new SR();r.lang='ru-RU';r.interimResults=false;r.maxAlternatives=1;$('#voiceTask').classList.add('listening');setHint('Слушаю… скажи задачу.');r.start();r.onresult=e=>{$('#taskInput').value=e.results[0][0].transcript;setHint('Готово — можно добавить задачy кнопкой +.');};r.onerror=e=>setHint(e.error==='not-allowed'?'Разреши микрофон для этого сайта и попробуй ещё раз.':'Не удалось распознать речь. Попробуй ещё раз.');r.onend=()=>$('#voiceTask').classList.remove('listening')};
 function speak(text){if(!('speechSynthesis'in window)||!text.trim())return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='ru-RU';u.rate=.93;window.speechSynthesis.speak(u)} $('#listenFocus').onclick=()=>speak(state.focus||'Пока фокус дня не записан.');$('#soundToggle').onclick=()=>speak(state.focus||'Добро пожаловать в Night Notes.');const themeToggle=$('#themeToggle');const syncThemeToggle=()=>{const dimmed=document.body.classList.contains('night');themeToggle.setAttribute('aria-pressed',String(dimmed));themeToggle.setAttribute('aria-label',dimmed?'Включить яркий свет':'Приглушить свет');themeToggle.textContent=dimmed?'◑ включить яркий свет':'◐ приглушить свет'};themeToggle.onclick=()=>{document.body.classList.toggle('night');syncThemeToggle()};syncThemeToggle();
 $('#askChatGpt').onclick=()=>{const openTasks=state.tasks.filter(t=>!t.done).map(t=>`— ${t.text}`).join('\n')||'— пока нет';const context=`Помоги мне мягко распланировать день.\n\nМой фокус: ${state.focus||'ещё не записан'}\n\nОткрытые дела:\n${openTasks}\n\nПредложи реалистичный следующий шаг и бережный план без перегруза.`;window.open('https://chatgpt.com/','_blank','noopener');navigator.clipboard?.writeText(context).then(()=>{const label=$('.chatgpt-label');label.textContent='Контекст скопирован';setTimeout(()=>label.textContent='Спросить ChatGPT',1800)}).catch(()=>{});};
@@ -1716,7 +1749,7 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=54')) budgetStylesheet.href = 'styles.css?v=54&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=55')) budgetStylesheet.href = 'styles.css?v=55&journey=1';
 mountBudgetJourney();
 renderBudget();
 
@@ -1928,6 +1961,24 @@ function normalizeInspirationArchive() {
   state.inspirationArchive = [...byDate.values()].sort((a,b) => String(b.date).localeCompare(String(a.date)));
   state.inspirationArchive.forEach(item => Object.assign(item, { date:item.date, ...inspirationCatalog[dailyInspirationIndex(item.date)] }));
 }
+function archivePastInspiration(today) {
+  state.archive ??= [];
+  let changed = false;
+  state.inspirationArchive.filter(item => item.date < today).forEach(item => {
+    const exists = state.archive.some(entry => entry.source === 'daily-inspiration' && entry.payload?.date === item.date);
+    if (exists) return;
+    state.archive.unshift({
+      id: `daily-inspiration-${item.date}`,
+      type: 'ВДОХНОВЕНИЕ',
+      text: `${item.title} · ${item.artist}`,
+      source: 'daily-inspiration',
+      archivedAt: new Date(`${item.date}T12:00:00`).toISOString(),
+      payload: { date:item.date, quote:item.quote, author:item.author, title:item.title, artist:item.artist, info:item.info, source:item.source, image:item.image }
+    });
+    changed = true;
+  });
+  return changed;
+}
 function renderDailyInspiration() {
   const artwork = $('#dailyArtwork'); if (!artwork) return;
   state.inspirationArchive ??= [];
@@ -1945,8 +1996,12 @@ function renderDailyInspiration() {
     Object.assign(entry, { date:key, ...dailyArtwork });
     changed = changed || before !== JSON.stringify(entry);
   }
-  // Generated daily artwork is a local cache, not an unsent user edit.
-  if (changed && !startupStorageError && !damagedNotebook) localStorage.setItem('night-notes-v1', JSON.stringify(state));
+  // Yesterday's complete card is preserved in the shared, main archive once a new day starts.
+  const archiveChanged = archivePastInspiration(key);
+  if ((changed || archiveChanged) && !startupStorageError && !damagedNotebook) {
+    try { save(); } catch { localStorage.setItem('night-notes-v1', JSON.stringify(state)); }
+  }
+  if (archiveChanged) renderArchive();
   $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
   const showArtwork = (node, fallback) => {
     node.onerror = () => { node.onerror = null; node.src = fallback; };
@@ -1962,15 +2017,6 @@ function renderDailyInspiration() {
   $('#dailyArtworkSource').href = entry.source;
   $('#dailyQuote').textContent = `«${entry.quote}»`;
   $('#dailyAuthor').textContent = `— ${entry.author}`;
-  const archive = $('#inspirationArchive'); archive.innerHTML = '';
-  state.inspirationArchive.forEach(item => {
-    const row = document.createElement('article');
-    row.innerHTML = '<time></time><p></p><small></small>';
-    row.querySelector('time').textContent = item.date;
-    row.querySelector('p').textContent = `«${item.quote}»`;
-    row.querySelector('small').textContent = `${item.title} · ${item.artist}`;
-    archive.append(row);
-  });
 }
 const renderCloudStateWithInspiration = renderCloudState;
 renderCloudState = () => { renderCloudStateWithInspiration(); renderDailyInspiration(); };
