@@ -852,3 +852,36 @@ button.health-quick-card { font:inherit; }
   .note-card-actions { width:100%; justify-content:flex-end; }
 }
 
+
+/* Screenshot import stays with the budget journal, with a review step before anything is saved. */
+.budget-entry-heading { align-items: center; gap: 12px; }
+.budget-entry-actions { margin-left: auto; }
+.receipt-import-button { min-height: 42px; padding: 9px 12px; border: 1px solid var(--line); background: #fffaf4; color: var(--ink); font: inherit; font-weight: 700; border-radius: 8px; cursor: pointer; }
+.receipt-import-button:hover { border-color: var(--accent); color: var(--accent); }
+.receipt-import-review { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.receipt-import-title { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+.receipt-import-title h3 { margin: 3px 0 0; font-size: 1.2rem; }
+.receipt-import-status { margin: 12px 0; color: var(--muted); }
+.receipt-import-rows { display:grid; gap:10px; max-height: 520px; overflow:auto; padding-right: 2px; }
+.receipt-import-row { display:grid; grid-template-columns:28px minmax(0,1fr); gap:8px; padding:12px; background:#fffaf4; border:1px solid var(--line); border-radius:10px; transition: opacity .15s ease; }
+.receipt-import-row.is-skipped { opacity:.48; }
+.receipt-check { display:flex; align-items:flex-start; padding-top: 8px; }
+.receipt-check input { width:18px; height:18px; accent-color:var(--accent); }
+.receipt-import-fields { display:grid; gap:8px; }
+.receipt-import-fields input, .receipt-import-fields select { min-width:0; width:100%; padding:9px 10px; border:1px solid var(--line); background:#fff; color:var(--ink); font:inherit; border-radius:6px; }
+.receipt-compact-fields { display:grid; grid-template-columns:1.1fr .9fr .7fr; gap:7px; }
+.receipt-compact-fields + .receipt-compact-fields { grid-template-columns:1fr 1.45fr; }
+.receipt-import-fields small { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.receipt-import-footer { display:flex; align-items:center; gap:12px; margin-top:12px; }
+.receipt-import-footer p { flex:1; margin:0; color:var(--muted); font-size:.82rem; }
+.receipt-import-footer .add-button { width:auto; min-width:156px; padding:10px 14px; }
+.receipt-import-footer .add-button:disabled { opacity:.5; cursor:not-allowed; }
+@media (max-width:760px) {
+  .budget-entry-heading { align-items:flex-start; }
+  .budget-entry-actions { margin-left:0; }
+  .receipt-import-button { min-height:44px; }
+  .receipt-compact-fields, .receipt-compact-fields + .receipt-compact-fields { grid-template-columns:1fr 1fr; }
+  .receipt-compact-fields .receipt-currency { grid-column:span 2; }
+  .receipt-import-footer { align-items:stretch; flex-direction:column; }
+  .receipt-import-footer .add-button { width:100%; min-height:46px; }
+}
