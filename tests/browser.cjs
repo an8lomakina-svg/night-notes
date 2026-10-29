@@ -1,0 +1,24 @@
+process.env.TZ='Europe/Belgrade';
+const {chromium}=require('playwright');
+const fs=require('node:fs'),path=require('node:path');
+(async()=>{
+const browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE || undefined,args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'],headless:true});
+const results=[],errors=[];
+const context=await browser.newContext({viewport:{width:393,height:852},deviceScaleFactor:3,isMobile:true,hasTouch:true});
+await context.route('**/*',route=>{const u=new URL(route.request().url());if(u.origin==='https://audit.test'){let f=u.pathname.split('/').pop()||'index.html';const p=path.join(__dirname,'..',f);if(fs.existsSync(p))return route.fulfill({body:fs.readFileSync(p),contentType:f.endsWith('.js')?'application/javascript':f.endsWith('.css')?'text/css':f.endsWith('.webmanifest')?'application/manifest+json':'text/html'});}if(u.pathname.includes('supabase-js'))return route.fulfill({body:'',contentType:'application/javascript'});return route.abort();});
+const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.goto('https://audit.test/night-notes/#budget');await page.waitForTimeout(100);
+const sections=['today','calendar','shopping','budget','notes','archive'];
+for(const width of [320,393,430,852]){await page.setViewportSize({width,height:width===852?393:852});for(const view of sections){await page.locator('[data-view="'+view+'"]').click();await page.waitForTimeout(60);const metrics=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,active:[...document.querySelectorAll('.view.active')].map(x=>x.id),header:document.querySelector('.sidebar').getBoundingClientRect().height}));results.push({area:'layout',name:view+' at '+width+'px',status:metrics.scroll<=width&&metrics.active[0]===view?'PASS':'FAIL',metrics});}}
+await page.setViewportSize({width:393,height:852});await page.locator('[data-view="budget"]').click();
+await page.locator('#transactionName').fill('Длинная запись для проверки экрана iPhone 15');await page.locator('#transactionAmount').fill('1234.56');await page.locator('#transactionDate').fill('2026-10-29');const cat=await page.locator('#transactionCategory option').evaluateAll(els=>els.find(x=>x.value).value);await page.locator('#transactionCategory').selectOption(cat);await page.locator('#budgetForm button[type="submit"]').click();
+results.push({area:'browser',name:'Real browser submit saves exactly once',status:await page.locator('#transactionList .transaction').count()===1?'PASS':'FAIL'});
+await page.reload();await page.waitForTimeout(60);results.push({area:'browser',name:'Real browser reload retains saved transaction',status:await page.locator('#transactionList .transaction').count()===1?'PASS':'FAIL'});
+await page.locator('#addBudgetCategory').click();const box=await page.locator('#budgetCategoryDialog').boundingBox();results.push({area:'layout',name:'Category dialog fits 393px screen',status:box.x>=0&&box.x+box.width<=393?'PASS':'FAIL',box});await page.locator('#budgetCategoryName').fill('Проверка браузера');await page.locator('#budgetCategoryForm button[type=submit]').click();results.push({area:'browser',name:'Custom category selected after saving',status:await page.locator('#transactionCategory').inputValue()==='Проверка браузера'?'PASS':'FAIL'});
+await page.screenshot({path:__dirname+'/budget-393.png',fullPage:true});
+await page.locator('[data-view="shopping"]').click();await page.locator('#shoppingInput').fill('Очень длинное название покупки для проверки ширины');await page.locator('#shoppingItemForm button').click();const size=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,input:document.querySelector('.shopping-item-input').getBoundingClientRect().width}));results.push({area:'layout',name:'Shopping row fits narrow viewport',status:size.scroll<=393?'PASS':'FAIL',size});await page.screenshot({path:__dirname+'/shopping-393.png',fullPage:true});
+await page.locator('[data-view="budget"]').click();await page.locator('#budgetLedgerFilter').selectOption('income');results.push({area:'browser',name:'CSS really hides transactions filtered out',status:await page.locator('#transactionList .transaction:visible').count()===0?'PASS':'FAIL'});
+const account=await page.locator('#transactionAccount').isVisible();results.push({area:'layout',name:'Account selector hidden until expanded',status:!account?'PASS':'FAIL'});
+results.push({area:'browser',name:'No uncaught JavaScript exceptions',status:errors.length?'FAIL':'PASS',errors});
+if(results.some(r=>r.status==='FAIL'))process.exitCode=1;fs.writeFileSync(__dirname+'/browser-results.json',JSON.stringify(results,null,2));console.log(JSON.stringify(results.filter(x=>x.status==='FAIL'),null,2));console.log('TOTAL',results.length,'PASS',results.filter(x=>x.status==='PASS').length);
+await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});

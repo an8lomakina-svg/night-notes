@@ -1,0 +1,15 @@
+process.env.TZ='Europe/Belgrade';
+const {boot}=require('./harness.cjs'),assert=require('node:assert/strict');
+const S=require('../sync-core.js');let count=0;
+const book=(id,name=id)=>({budget:{transactions:[{id,name,amount:100,type:'expense',currency:'RSD',date:'2026-10-29',category:'Продукты'}],categorySchema:'2026-10-v3'},events:{},tasks:[],notes:[],plans:{dream:[],next:[],done:[]}});
+async function test(name,fn,opts){const h=await boot(opts);try{await fn(h);assert.equal(h.errors.length,0,h.errors.join('\n'));console.log('PASS',name);count++;}finally{h.close();}}
+async function upload(h,state){const input=h.$('#dataFileInput');Object.defineProperty(input,'files',{configurable:true,value:[{text:async()=>JSON.stringify({format:'night-notes-backup-v1',state})}]});h.event(input,'change');await new Promise(r=>setTimeout(r,30));}
+(async()=>{
+await test('Corrupt JSON preserved verbatim and recovery banner visible',h=>{assert.equal(h.w.localStorage.getItem('night-notes-v1'),'{broken');assert.equal(h.w.localStorage.getItem('night-notes-damaged-v1'),'{broken');assert(!h.$('#storageRecovery').hidden);},{storage:{'night-notes-v1':'{broken'}});
+await test('Import restores corrupted notebook and survives reload',async h=>{await upload(h,book('restored'));assert.equal(h.w.audit.state.budget.transactions[0].id,'restored');assert(h.$('#storageRecovery').hidden);assert.equal(JSON.parse(h.w.localStorage.getItem('night-notes-v1')).budget.transactions[0].id,'restored');},{storage:{'night-notes-v1':'{broken'}});
+await test('Import adds to existing records instead of replacing',async h=>{await upload(h,book('new'));assert.deepEqual(Array.from(h.w.audit.state.budget.transactions,t=>t.id).sort(),['new','old']);},{storage:{'night-notes-v1':JSON.stringify(book('old'))}});
+await test('Import conflict keeps local data until explicit choice',async h=>{await upload(h,book('old','remote'));assert.equal(h.w.audit.state.budget.transactions[0].name,'local');assert(!h.$('#syncConflict').hidden);h.$('#resolveSyncRemote').click();await new Promise(r=>setTimeout(r,20));assert.equal(h.w.audit.state.budget.transactions[0].name,'remote');assert(h.w.localStorage.getItem('night-notes-resolved-conflict-v1'));},{storage:{'night-notes-v1':JSON.stringify(book('old','local'))}});
+await test('Deletion produces durable tombstone; restoration removes it',h=>{h.$('.transaction > .delete').click();const saved=JSON.parse(h.w.localStorage.getItem('night-notes-v1'));assert.equal(Object.keys(saved._sync.deleted).length,1);const merged=S.merge(undefined,saved,book('old'));assert.equal(merged.state.budget.transactions.length,0);},{storage:{'night-notes-v1':JSON.stringify(book('old'))}});
+await test('Import restores deleted record without replaying old tombstones',async h=>{h.$('.transaction > .delete').click();await upload(h,book('old'));assert.equal(h.w.audit.state.budget.transactions[0].id,'old');assert.equal(Object.keys(h.w.audit.state._sync.deleted).length,0);},{storage:{'night-notes-v1':JSON.stringify(book('old'))}});
+console.log(count+' recovery checks passed');
+})().catch(e=>{console.error(e);process.exitCode=1});

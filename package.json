@@ -1,0 +1,13 @@
+{
+  "name": "night-notes",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node tests/core.cjs && node tests/ui.cjs && node tests/sync.cjs && node tests/mobile.cjs && node tests/recovery.cjs && node tests/multidevice.cjs",
+    "test:browser": "node tests/browser.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "30.1.3",
+    "playwright": "1.62.1"
+  }
+}

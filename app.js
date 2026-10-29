@@ -23,10 +23,28 @@ function renderGeneralChartNote(selected) {
     ['RSD', 'RUB', 'AMD'].map(code => `${generalChartRates[code]} ${code} (${generalChartQuoteDates[code]})`).join(' · ');
 }
 
-const state = JSON.parse(localStorage.getItem('night-notes-v1') || 'null') || {
-  focus: '', tasks: [{ id: 1, text: 'Прогуляться без наушников', done: false }, { id: 2, text: 'Разобрать одну важную вещь', done: false }],
-  plans: { dream: ['Увидеть осенний Нью-Йорк'], next: ['Собрать блокнот под себя'], done: [] }, events: {}, imports: []
-};
+let startupStorageError = false;
+let damagedNotebook = null;
+function loadNotebook() {
+  let raw=null;try{raw=localStorage.getItem('night-notes-v1')}catch{startupStorageError=true;}
+  if (raw) try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid_notebook');
+    if (!NotebookSync.valid({...parsed,budget:parsed.budget || {transactions:[]},events:parsed.events || {}})) throw new Error('invalid_notebook');
+    return parsed;
+  } catch {
+    damagedNotebook = raw;
+    try { localStorage.setItem('night-notes-damaged-v1', raw); } catch { startupStorageError = true; }
+  }
+  return {focus:'',tasks:[],plans:{dream:[],next:[],done:[]},events:{},imports:[]};
+}
+const state = loadNotebook();
+const recordId = () => crypto.randomUUID();
+function downloadJson(value, name) {
+  const blob = new Blob([typeof value === 'string' ? value : JSON.stringify(value,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob), link = document.createElement('a');
+  link.href=url; link.download=name; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+}
 const BACKUP_FORMAT = 'night-notes-backup-v1';
 const downloadBackup = () => {
   const payload = { format: BACKUP_FORMAT, exportedAt: new Date().toISOString(), state };
@@ -38,15 +56,35 @@ const downloadBackup = () => {
 $('#exportData')?.addEventListener('click', downloadBackup);
 $('#importData')?.addEventListener('click', () => $('#dataFileInput')?.click());
 $('#dataFileInput')?.addEventListener('change', async event => {
-  const file = event.target.files[0]; if (!file) return;
+  const file=event.target.files[0]; if (!file) return;
+  const message=$('#backupMessage');
   try {
-    const parsed = JSON.parse(await file.text());
-    const imported = parsed?.format === BACKUP_FORMAT ? parsed.state : parsed;
-    if (!imported || typeof imported !== 'object' || !imported.budget || !Array.isArray(imported.budget.transactions) || !imported.events || typeof imported.events !== 'object') throw new Error('invalid');
-    if (!confirm('Загрузить данные из файла? Текущие записи на этом устройстве будут заменены.')) return;
-    localStorage.setItem('night-notes-v1', JSON.stringify(imported)); location.reload();
-  } catch { alert('Не удалось прочитать файл блокнота. Выбери JSON, скачанный кнопкой ⇩.'); }
-  event.target.value = '';
+    const parsed=JSON.parse(await file.text());
+    const imported=parsed?.format === BACKUP_FORMAT ? parsed.state : parsed;
+    if (!NotebookSync.valid(imported)) throw new Error('invalid');
+    const importLocal=NotebookSync.clone(state),importRemote=NotebookSync.clone(imported);delete importLocal._sync;delete importRemote._sync;
+    const mergeResult=NotebookSync.merge(undefined,importLocal,importRemote);
+    if(mergeResult.conflicts.length){
+      localStorage.setItem(SYNC_CONFLICT_KEY,JSON.stringify({source:'import',target:syncTarget() || 'local',local:NotebookSync.clone(state),remote:importRemote,conflicts:mergeResult.conflicts}));
+      showSyncConflict();message.textContent='В копии есть отличающиеся записи. Выбери вариант ниже; текущие записи не изменены.';return;
+    }
+    const combined=mergeResult.state;combined._sync=NotebookSync.clone(state._sync);
+    // Restore adds records; it does not replace the existing notebook with a partial file.
+    // Conflicting IDs stay recoverable in both downloaded and local pre-import copies.
+    localStorage.setItem('night-notes-before-import-v1',JSON.stringify({savedAt:Date.now(),state}));
+    const previous=NotebookSync.clone(state);
+    const priorError=startupStorageError,priorDamaged=damagedNotebook;
+    if(damagedNotebook)localStorage.setItem('night-notes-damaged-v1',damagedNotebook);
+    Object.keys(state).forEach(key=>delete state[key]); Object.assign(state,combined);
+    startupStorageError=false;damagedNotebook=null;
+    try { save(); } catch(error) { Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,previous);startupStorageError=priorError;damagedNotebook=priorDamaged;throw error; }
+    damagedNotebook=null; startupStorageError=false;
+    renderCloudState(); showStorageRecovery();
+    message.textContent='Копия загружена. Записи добавлены к текущему блокноту.';
+  } catch {
+    message.textContent='Не удалось загрузить копию. Проверь файл и свободное место. Текущие записи сохранены.';
+    alert(message.textContent);
+  } finally { event.target.value=''; }
 });
 state.focus ??= '';
 state.tasks ??= [];
@@ -71,6 +109,9 @@ let pendingSync = null;
 try { pendingSync = JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || 'null'); } catch {}
 let localRevision = Number(pendingSync?.revision) || 0;
 let cloudPushPromise = null, sharedPushPromise = null;
+let lastSavedState = NotebookSync.clone(state);
+const SYNC_BASE_KEY='night-notes-sync-base-v2';
+const SYNC_CONFLICT_KEY='night-notes-sync-conflict-v1';
 const syncTarget = () => cloudUser ? 'user:' + cloudUser.id
   : sharedSync ? 'shared:' + sharedSync.secret
   : new URLSearchParams(location.search).get('sync') ? 'shared:' + new URLSearchParams(location.search).get('sync')
@@ -85,6 +126,9 @@ function acknowledgeSync(target, revision) {
   }
 }
 const save = () => {
+  if (startupStorageError) throw new Error('recovery_required');
+  const priorMeta=state._sync;
+  state._sync={version:1,deleted:NotebookSync.deletions(lastSavedState,state,state._sync?.deleted)};
   const nextPending = {target:syncTarget(), revision:localRevision + 1};
   const previousMarker = localStorage.getItem(PENDING_SYNC_KEY);
   localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(nextPending));
@@ -92,44 +136,36 @@ const save = () => {
   catch (error) {
     if (previousMarker === null) localStorage.removeItem(PENDING_SYNC_KEY);
     else localStorage.setItem(PENDING_SYNC_KEY, previousMarker);
+    state._sync=priorMeta;
     throw error;
   }
+  lastSavedState=NotebookSync.clone(state);
   pendingSync = nextPending;
   localRevision = nextPending.revision;
   renderArchive();
-  setSyncStatus('Сохранено на устройстве · ожидает синхронизации');
+  setSyncStatus(nextPending.target ? 'Сохранено на устройстве · ожидает синхронизации' : 'Сохранено на устройстве');
   queueCloudSave();
   queueSharedSave();
 };
-function setSyncStatus(message, synced = false) { const button = $('#syncAccount'); if (!button) return; button.classList.toggle('is-synced', synced); button.title = message; button.setAttribute('aria-label', message); }
+function setSyncStatus(message, synced = false) { const button = $('#syncAccount'); if (!button) return; button.classList.toggle('is-synced', synced); button.title = message; button.setAttribute('aria-label', message); for(const label of [$('#notebookSaveStatus'),$('#syncNotice')])if(label){label.textContent=message;label.dataset.synced=String(synced);} }
 function queueCloudSave() {
   if (!cloudClient || !cloudUser || cloudHydrating) return;
   clearTimeout(cloudSyncTimer);
   cloudSyncTimer = setTimeout(() => { cloudSyncTimer = null; if (cloudUser && hasPendingSync('user:' + cloudUser.id)) pushCloudState(); }, 300);
 }
-async function pushCloudState() {
-  if (!cloudClient || !cloudUser || cloudHydrating) return false;
+function cloudConnection() {
+  const user=cloudUser;
+  if (!cloudClient || !user) return null;
+  return {target:'user:'+user.id,current:()=>cloudUser?.id===user.id,
+    read:async()=>{const {data,error}=await cloudClient.from('notebook_state').select('payload').eq('user_id',user.id).maybeSingle();if(error)throw error;return data?.payload || null;},
+    write:async payload=>{const {error}=await cloudClient.from('notebook_state').upsert({user_id:user.id,payload,updated_at:new Date().toISOString()});if(error)throw error;}};
+}
+function pushCloudState() { return runCloudSync(true); }
+function runCloudSync(upload=false) {
   if (cloudPushPromise) return cloudPushPromise;
-  clearTimeout(cloudSyncTimer); cloudSyncTimer = null;
-  const user = cloudUser;
-  const target = 'user:' + user.id;
-  if (hasOtherPendingSync(target)) return false;
-  cloudPushPromise = (async () => {
-    try {
-      do {
-        const revision = localRevision;
-        const payload = JSON.parse(JSON.stringify(state));
-        const { error } = await cloudClient.from('notebook_state').upsert({user_id:user.id,payload,updated_at:new Date().toISOString()});
-        if (error) throw error;
-        acknowledgeSync(target, revision);
-      } while (cloudUser?.id === user.id && hasPendingSync(target));
-      setSyncStatus('Изменения синхронизированы', true);
-      return true;
-    } catch (error) {
-      setSyncStatus('Сохранено на устройстве · синхронизация не завершена');
-      return false;
-    } finally { cloudPushPromise = null; }
-  })();
+  const connection=cloudConnection();if(!connection)return Promise.resolve(false);
+  clearTimeout(cloudSyncTimer);cloudSyncTimer=null;cloudHydrating=true;
+  cloudPushPromise=syncNotebook(connection,upload).finally(()=>{cloudHydrating=false;cloudPushPromise=null;});
   return cloudPushPromise;
 }
 
@@ -198,68 +234,84 @@ function queueSharedSave() {
   clearTimeout(sharedSyncTimer);
   sharedSyncTimer = setTimeout(() => { sharedSyncTimer = null; if (sharedSync && hasPendingSync('shared:' + sharedSync.secret)) pushSharedState(); }, 300);
 }
-async function pushSharedState() {
-  if (!cloudClient || !sharedSync || sharedHydrating) return false;
-  if (sharedPushPromise) return sharedPushPromise;
-  clearTimeout(sharedSyncTimer); sharedSyncTimer = null;
-  const notebook = sharedSync;
-  const target = 'shared:' + notebook.secret;
-  if (hasOtherPendingSync(target)) return false;
-  sharedPushPromise = (async () => {
-    try {
-      do {
-        const revision = localRevision;
-        const snapshot = JSON.parse(JSON.stringify(state));
-        const payload = await encryptSharedState(notebook.secret, snapshot);
-        const { error } = await cloudClient.rpc('save_shared_notebook', {p_sync_id:notebook.id,p_payload:payload});
-        if (error) throw error;
-        acknowledgeSync(target, revision);
-      } while (sharedSync?.id === notebook.id && !cloudUser && hasPendingSync(target));
-      setSyncStatus('Приватная ссылка синхронизирована', true);
-      return true;
-    } catch (error) {
-      setSyncStatus('Сохранено на устройстве · синхронизация не завершена');
-      return false;
-    } finally { sharedPushPromise = null; }
-  })();
+function sharedConnection() {
+  const notebook=sharedSync;
+  if(!cloudClient || !notebook)return null;
+  return {target:'shared:'+notebook.secret,current:()=>sharedSync?.id===notebook.id,
+    read:async()=>{const {data,error}=await cloudClient.rpc('get_shared_notebook',{p_sync_id:notebook.id});if(error)throw error;return data ? decryptSharedState(notebook.secret,data) : null;},
+    write:async snapshot=>{const payload=await encryptSharedState(notebook.secret,snapshot);const {error}=await cloudClient.rpc('save_shared_notebook',{p_sync_id:notebook.id,p_payload:payload});if(error)throw error;}};
+}
+function pushSharedState() { return runSharedSync(true); }
+function hydrateSharedState() { return cloudUser ? Promise.resolve(false) : runSharedSync(); }
+function runSharedSync(upload=false) {
+  if(sharedPushPromise)return sharedPushPromise;
+  const connection=sharedConnection();if(!connection)return Promise.resolve(false);
+  clearTimeout(sharedSyncTimer);sharedSyncTimer=null;sharedHydrating=true;
+  sharedPushPromise=syncNotebook(connection,upload).finally(()=>{sharedHydrating=false;sharedPushPromise=null;});
   return sharedPushPromise;
 }
-async function hydrateSharedState() {
-  if (!cloudClient || !sharedSync || sharedHydrating || cloudUser) return;
-  const notebook = sharedSync;
-  const target = 'shared:' + notebook.secret;
-  if (hasOtherPendingSync(target)) {
-    setSyncStatus('На устройстве есть неотправленные изменения другого блокнота');
-    return;
-  }
-  rememberSyncTarget(target);
-  if (hasPendingSync(target) || sharedPushPromise) { await pushSharedState(); return; }
-  sharedHydrating = true;
-  const revision = localRevision;
-  let shouldPush = false;
+function readSyncBase(target) {
+  try {const item=JSON.parse(localStorage.getItem(SYNC_BASE_KEY)||'null');return item?.target===target ? item.state : undefined;} catch {return undefined;}
+}
+function sameNotebook(a,b) {
+  const clean=value=>{
+    const copy=NotebookSync.clone(value || {});
+    delete copy.inspirationArchive;delete copy.dailyInspiration;delete copy.activeShoppingListId;
+    if(!Object.keys(copy._sync?.deleted || {}).length)delete copy._sync;else copy._sync={deleted:copy._sync.deleted};
+    return copy;
+  };
+  return NotebookSync.equal(clean(a),clean(b));
+}
+async function syncNotebook(connection,upload) {
+  const {target}=connection;
+  if(startupStorageError || damagedNotebook) {setSyncStatus('Нужно восстановить локальную копию');return false;}
+  if(hasOtherPendingSync(target)){setSyncStatus('На устройстве есть неотправленные изменения другого блокнота');return false;}
   try {
-    setSyncStatus('Загружаю общий блокнот…');
-    const {data,error} = await cloudClient.rpc('get_shared_notebook', {p_sync_id:notebook.id});
-    if (error) throw error;
-    const remoteState = data ? await decryptSharedState(notebook.secret, data) : null;
-    // A save can happen while the request or decryption is still running.
-    if (localRevision !== revision || hasPendingSync(target)) { shouldPush = true; return; }
-    if (sharedSync?.id !== notebook.id || cloudUser) return;
-    if (remoteState) {
-      Object.keys(state).forEach(key => delete state[key]);
-      Object.assign(state, remoteState);
-      normalizeCloudState();
-      localStorage.setItem('night-notes-v1', JSON.stringify(state));
-      renderCloudState();
-    } else { shouldPush = true; }
-    if (!shouldPush) setSyncStatus('Приватная ссылка синхронизирована', true);
-    if (syncMessage) syncMessage.textContent = 'Общий блокнот подключён. Все изменения шифруются в браузере.';
-  } catch (error) {
-    setSyncStatus('Не удалось синхронизировать · записи на устройстве сохранены');
-  } finally {
-    sharedHydrating = false;
-    if (shouldPush || hasPendingSync(target)) await pushSharedState();
+    for(let attempt=0;attempt<4;attempt++) {
+      setSyncStatus('Проверяю облачную копию…');
+      const remote=await connection.read();
+      if(!connection.current())return false;
+      if(remote && !NotebookSync.valid(remote))throw new Error('invalid_remote');
+      const local=NotebookSync.clone(state),base=readSyncBase(target);
+      const parallelBranch=base?._sync?.commit && remote?._sync?.commit && base._sync.commit!==remote._sync.commit && !(remote._sync.ancestors || []).includes(base._sync.commit);
+      const mergeBase=parallelBranch ? undefined : base;
+      const result=NotebookSync.merge(mergeBase,local,remote || {});
+      if(result.conflicts.length) {
+        localStorage.setItem(SYNC_CONFLICT_KEY,JSON.stringify({target,base:mergeBase,baseline:base,local,remote,conflicts:result.conflicts}));
+        showSyncConflict();setSyncStatus('Есть разные версии записей · выбери вариант в синхронизации');return false;
+      }
+      const needsUpload=upload || hasPendingSync(target) || (hasNotebookEntries(local) && !sameNotebook(result.state,remote));
+      const snapshot=result.state;
+      if(!sameNotebook(local,snapshot) && hasNotebookEntries(local))localStorage.setItem('night-notes-before-sync-v2',JSON.stringify({target,savedAt:Date.now(),state:local}));
+      // Keep a durable pending marker before applying a merged state that needs upload.
+      if(needsUpload && !hasPendingSync(target)) {
+        const marker={target,revision:localRevision+1};localStorage.setItem(PENDING_SYNC_KEY,JSON.stringify(marker));pendingSync=marker;localRevision=marker.revision;
+      }
+      localStorage.setItem('night-notes-v1',JSON.stringify(snapshot));
+      Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,snapshot);
+      normalizeCloudState();lastSavedState=NotebookSync.clone(state);renderCloudState();
+      rememberSyncTarget(target);
+      localStorage.setItem(SYNC_BASE_KEY,JSON.stringify({target,state:remote || {}}));
+      if(!needsUpload){setSyncStatus('Изменения синхронизированы',true);return true;}
+      const revision=localRevision;
+      const outgoing=NotebookSync.clone(state);
+      outgoing._sync={...outgoing._sync,commit:recordId(),ancestors:[...new Set([...(remote?._sync?.ancestors || []),remote?._sync?.commit,...(base?._sync?.ancestors || []),base?._sync?.commit].filter(Boolean))].slice(-64)};
+      await connection.write(outgoing);
+      const verified=await connection.read();
+      if(!connection.current())return false;
+      if(!verified || !NotebookSync.valid(verified))throw new Error('verify_failed');
+      if(!sameNotebook(verified,outgoing)){upload=true;continue;}
+      localStorage.setItem(SYNC_BASE_KEY,JSON.stringify({target,state:outgoing}));
+      acknowledgeSync(target,revision);
+      if(!hasPendingSync(target)){setSyncStatus('Изменения синхронизированы',true);return true;}
+      upload=true;
+    }
+    setSyncStatus('Сохранено на устройстве · синхронизация продолжится');
+    setTimeout(()=>cloudUser?hydrateCloudState():hydrateSharedState(),300);
+  } catch {
+    setSyncStatus('Синхронизация не завершена · локальная копия сохранена');
   }
+  return false;
 }
 const archiveRecord=(record)=>state.archive.unshift({id:`archive-${Date.now()}-${Math.random().toString(16).slice(2)}`,archivedAt:new Date().toISOString(),...record});
 const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -523,7 +575,18 @@ window.addEventListener('focus', () => refreshGoogleEvents().catch(showGoogleErr
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refreshGoogleEvents().catch(showGoogleError);
 });
-$('#importCalendar').onclick=()=>$('#icsInput').click();$('#icsInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;const raw=await f.text();let added=0;raw.split('BEGIN:VEVENT').slice(1).forEach(block=>{const val=(name)=>block.match(new RegExp(name+'(?:;[^:]*)?:(.+)'))?.[1]?.trim();const dt=val('DTSTART'),title=val('SUMMARY');if(dt&&title){const date=`${dt.slice(0,4)}-${dt.slice(4,6)}-${dt.slice(6,8)}`;const time=dt.includes('T')?`${dt.slice(9,11)}:${dt.slice(11,13)}`:'ВЕСЬ ДЕНЬ';state.imports.push({date,title,time});added++}});save();renderCalendar();alert(`Импортировано событий: ${added}`);e.target.value=''};
+$('#importCalendar').onclick=()=>$('#icsInput').click();
+$('#icsInput').onchange=async event=>{
+  const input=event.target,file=input.files[0];if(!file)return;
+  try{
+    const {events,rejected}=NotebookCalendar.parse(await file.text());
+    const previous=NotebookSync.clone(state.imports);let added=0,updated=0;
+    for(const item of events){const found=state.imports.findIndex(old=>old.uid===item.uid || (!old.uid && old.date===item.date && old.time===item.time && old.title===item.title));if(found<0){state.imports.push(item);added++;}else if(!NotebookSync.equal(state.imports[found],item)){state.imports[found]=item;updated++;}}
+    try{save()}catch(error){state.imports=previous;throw error;}
+    renderCalendar();alert(`Добавлено: ${added}. Обновлено: ${updated}. Пропущено неверных событий: ${rejected}.`);
+  }catch{alert('Не удалось импортировать календарь. Текущие события сохранены.');}
+  input.value='';
+};
 function restoreArchive(entry){const payload=entry.payload||{};if(entry.source==='task')state.tasks.push(payload);if(entry.source==='plan')state.plans[payload.key].push(payload.text);if(entry.source==='focus'){state.focus=payload.text||entry.text;$('#focusInput').value=state.focus}if(entry.source==='event'){(state.events[payload.date]??=[]).push({title:payload.title,time:payload.time})}if(entry.source==='google-event')state.hiddenGoogleEvents=state.hiddenGoogleEvents.filter(id=>id!==payload.googleId);if(entry.source==='calendar-import')state.imports.push(payload.item);if(entry.source==='shopping-item'){const list=state.shoppingLists.find(x=>x.id===payload.listId)||{id:payload.listId||Date.now(),name:payload.listName||'Мой список',items:[]};if(!state.shoppingLists.includes(list))state.shoppingLists.push(list);list.items.push(payload.item)}if(entry.source==='shopping-list'){state.shoppingLists.push(payload.list)}if(entry.source==='budget')state.budget.transactions.push(payload.item);if(entry.source==='health')state.health[payload.kind].push(payload.item);state.archive=state.archive.filter(x=>x.id!==entry.id);save();renderTasks();renderPlans();renderCalendar();renderShopping();renderBudget();renderHealth('done');renderHealth('todo')}
 function renderArchive(){const entries=state.archive;const b=$('#archiveList');b.innerHTML=entries.length?'':'<p class="empty">Здесь появятся записи, которые ты отправишь в архив.</p>';entries.forEach(entry=>{const el=document.createElement('article');el.className='archive-entry';const date=entry.archivedAt?new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'short'}).format(new Date(entry.archivedAt)).toUpperCase():'АРХИВ';el.innerHTML=`<time>${entry.type} · ${date}</time><p></p><div class="archive-actions"><button class="restore-action" type="button">Вернуть</button><button class="delete" type="button" aria-label="Удалить запись из архива">×</button></div>`;el.querySelector('p').textContent=entry.text;el.querySelector('.restore-action').onclick=()=>restoreArchive(entry);el.querySelector('.delete').onclick=()=>{state.archive=state.archive.filter(x=>x.id!==entry.id);save()};b.append(el)})} renderArchive();
 const setHint=(x)=>{const h=$('#voiceHint');h.hidden=!x;h.textContent=x}; const SR=window.SpeechRecognition||window.webkitSpeechRecognition; $('#voiceTask').onclick=async()=>{if(!window.isSecureContext){setHint('Голосовой ввод работает в опубликованном блокноте по HTTPS — открой ссылку GitHub Pages.');return}if(!SR){setHint('Этот браузер не поддерживает голосовой ввод. Открой блокнот в Chrome или Safari и нажми значок микрофона в поле.');return}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(track=>track.stop())}catch{setHint('Разреши доступ к микрофону для этого сайта — затем нажми кнопку ещё раз.');return}const r=new SR();r.lang='ru-RU';r.interimResults=false;r.maxAlternatives=1;$('#voiceTask').classList.add('listening');setHint('Слушаю… скажи задачу.');r.start();r.onresult=e=>{$('#taskInput').value=e.results[0][0].transcript;setHint('Готово — можно добавить задачy кнопкой +.');};r.onerror=e=>setHint(e.error==='not-allowed'?'Разреши микрофон для этого сайта и попробуй ещё раз.':'Не удалось распознать речь. Попробуй ещё раз.');r.onend=()=>$('#voiceTask').classList.remove('listening')};
@@ -568,12 +631,12 @@ function migrateBudgetCategories() {
   if (state.budget.categorySchema === '2026-10-v3') return;
   state.budget.transactions.forEach(entry => entry.category = categoryFor(entry.name, entry.category));
   state.budget.categorySchema = '2026-10-v3';
-  localStorage.setItem('night-notes-v1', JSON.stringify(state));
+  if (!startupStorageError && !damagedNotebook) localStorage.setItem('night-notes-v1', JSON.stringify(state));
 }
 if (state.budget.categorySchema !== '2026-10-v3') {
   state.budget.transactions.forEach(entry => entry.category = categoryFor(entry.name, entry.category));
   state.budget.categorySchema = '2026-10-v3';
-  localStorage.setItem('night-notes-v1', JSON.stringify(state));
+  if (!startupStorageError && !damagedNotebook) localStorage.setItem('night-notes-v1', JSON.stringify(state));
 }
 const currency = (n, code='RSD') => new Intl.NumberFormat('ru-RU',{style:'currency',currency:code,maximumFractionDigits:code==='EUR'?2:0}).format(n||0);
 function removeItem(list, id){ const i=list.findIndex(x=>x.id===id); if(i>-1) list.splice(i,1); save(); }
@@ -590,8 +653,8 @@ function renderShopping(){
   const left=active.items.filter(item=>!item.done).length;
   $('#shoppingCount').textContent=`${left} / ${active.items.length}`;
 }
-$('#shoppingListForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#shoppingListInput');if(!input.value.trim())return;const list={id:Date.now(),name:input.value.trim(),items:[]};state.shoppingLists.push(list);state.activeShoppingListId=list.id;input.value='';save();renderShopping()});
-$('#shoppingItemForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#shoppingInput'),active=activeShoppingList();if(!input.value.trim())return;active.items.push({id:Date.now(),text:input.value.trim(),done:false});input.value='';save();renderShopping()});
+$('#shoppingListForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#shoppingListInput');if(!input.value.trim())return;const list={id:recordId(),name:input.value.trim(),items:[]};state.shoppingLists.push(list);state.activeShoppingListId=list.id;input.value='';save();renderShopping()});
+$('#shoppingItemForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#shoppingInput'),active=activeShoppingList();if(!input.value.trim())return;const item={id:recordId(),text:input.value.trim(),done:false};active.items.push(item);try{save()}catch{active.items=active.items.filter(x=>x!==item);$('#shoppingSaveStatus').textContent='Не удалось сохранить. Текст остался в поле — попробуй ещё раз.';return}input.value='';$('#shoppingSaveStatus').textContent='Добавлено в список';renderShopping()});
 $('#archiveShoppingList').onclick=()=>{const active=activeShoppingList();archiveRecord({type:'СПИСОК ПОКУПОК',text:active.name,source:'shopping-list',payload:{list:{...active,items:active.items.map(item=>({...item}))}}});state.shoppingLists=state.shoppingLists.filter(list=>list.id!==active.id);if(!state.shoppingLists.length)state.shoppingLists.push({id:'main',name:'Мой список',items:[]});state.activeShoppingListId=state.shoppingLists[0].id;save();renderShopping()};
 $('#deleteShoppingList').onclick=()=>{const active=activeShoppingList();state.shoppingLists=state.shoppingLists.filter(list=>list.id!==active.id);if(!state.shoppingLists.length)state.shoppingLists.push({id:'main',name:'Мой список',items:[]});state.activeShoppingListId=state.shoppingLists[0].id;save();renderShopping()};
 const budgetEntryCreatedAt = item => {
@@ -697,7 +760,7 @@ budgetForm.addEventListener('submit', e => {
     return;
   }
   const recordedAt = new Date();
-  const item = {id:recordedAt.getTime(),createdAt:recordedAt.toISOString(),name:name.value.trim(),amount:amountValue,type,category:transactionCategory.value,currency:$('#transactionCurrency').value,date:date.value,account:$('#transactionAccount')?.value||'',fromAccount:'',toAccount:'',comment:comment.value.trim()};
+  const item = {id:recordId(),createdAt:recordedAt.toISOString(),name:name.value.trim(),amount:amountValue,type,category:transactionCategory.value,currency:$('#transactionCurrency').value,date:date.value,account:$('#transactionAccount')?.value||'',fromAccount:'',toAccount:'',comment:comment.value.trim()};
   state.budget.transactions.push(item);
   try {
     save();
@@ -907,7 +970,7 @@ $('#healthQuickFiles').addEventListener('change', async event => {
 $('#healthCancelEdit').addEventListener('click', () => resetHealthComposer());
 resetHealthComposer();
 
-$('#askChatGpt').onclick=()=>{const shopping=state.shoppingLists.flatMap(list=>list.items.filter(item=>!item.done).map(item=>`— ${list.name}: ${item.text}`)).join('\n')||'— пока нет';const tasks=state.tasks.filter(t=>!t.done).map(t=>`— ${t.text}`).join('\n')||'— пока нет';const tx=state.budget.transactions;const income=tx.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0),expense=tx.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);const health=state.health.todo.map(x=>`— ${x.text}`).join('\n')||'— пока нет';const context=`Помоги мне мягко спланировать ближайшие дни.\n\nФокус дня: ${state.focus||'ещё не записан'}\n\nДела:\n${tasks}\n\nПокупки:\n${shopping}\n\nБюджет: доходы ${currency(income)}, расходы ${currency(expense)}.\n\nЗапланировать по здоровью:\n${health}\n\nПредложи реалистичный следующий шаг и бережный план без перегруза.`;window.open('https://chatgpt.com/','_blank','noopener');navigator.clipboard?.writeText(context).then(()=>{const label=$('.chatgpt-label');label.textContent='Контекст скопирован';setTimeout(()=>label.textContent='Спросить ChatGPT',1800)}).catch(()=>{});};
+$('#askChatGpt').onclick=()=>{const shopping=state.shoppingLists.flatMap(list=>list.items.filter(item=>!item.done).map(item=>`— ${list.name}: ${item.text}`)).join('\n')||'— пока нет';const tasks=state.tasks.filter(t=>!t.done).map(t=>`— ${t.text}`).join('\n')||'— пока нет';const tx=state.budget.transactions;const money=type=>{const sums={};tx.filter(x=>x.type===type).forEach(x=>{const c=x.currency||'RUB';sums[c]=(sums[c]||0)+x.amount});return Object.entries(sums).map(([c,n])=>currency(n,c)).join(' · ')||'—'};const income=money('income'),expense=money('expense');const health=state.health.todo.map(x=>`— ${x.text}`).join('\n')||'— пока нет';const context=`Помоги мне мягко спланировать ближайшие дни.\n\nФокус дня: ${state.focus||'ещё не записан'}\n\nДела:\n${tasks}\n\nПокупки:\n${shopping}\n\nБюджет: доходы ${income}, расходы ${expense}.\n\nЗапланировать по здоровью:\n${health}\n\nПредложи реалистичный следующий шаг и бережный план без перегруза.`;window.open('https://chatgpt.com/','_blank','noopener');navigator.clipboard?.writeText(context).then(()=>{const label=$('.chatgpt-label');label.textContent='Контекст скопирован';setTimeout(()=>label.textContent='Спросить ChatGPT',1800)}).catch(()=>{});};
 // Legacy tasks stay in saved data but are not auto-created on the start page.
 renderTasks();
 renderShopping();renderBudget();renderHealth('done');renderHealth('todo');
@@ -1153,70 +1216,25 @@ function hasNotebookEntries(source) {
   return budget + events + imports + shopping + health + archive + customTasks + focus + plans + (source?.notes?.length || 0) > 0;
 }
 
-async function hydrateCloudState() {
-  if (!cloudClient || !cloudUser || cloudHydrating) return;
-  const user = cloudUser;
-  const target = 'user:' + user.id;
-  if (hasOtherPendingSync(target)) {
-    setSyncStatus('На устройстве есть неотправленные изменения другого блокнота');
-    return;
-  }
-  rememberSyncTarget(target);
-  if (hasPendingSync(target) || cloudPushPromise) { await pushCloudState(); return; }
-  cloudHydrating = true;
-  const revision = localRevision;
-  let shouldPush = false;
-  try {
-    const {data,error} = await cloudClient.from('notebook_state').select('payload').eq('user_id',user.id).maybeSingle();
-    if (error) throw error;
-    if (localRevision !== revision || hasPendingSync(target)) { shouldPush = true; return; }
-    if (cloudUser?.id !== user.id) return;
-    const remote = data?.payload && typeof data.payload === 'object' ? data.payload : null;
-    if (remote && !(hasNotebookEntries(state) && !hasNotebookEntries(remote))) {
-      Object.keys(state).forEach(key => delete state[key]);
-      Object.assign(state, remote);
-      normalizeCloudState();
-      localStorage.setItem('night-notes-v1', JSON.stringify(state));
-      renderCloudState();
-    } else { shouldPush = hasNotebookEntries(state); }
-    if (!shouldPush) setSyncStatus('Изменения синхронизированы', true);
-  } catch (error) {
-    setSyncStatus('Не удалось синхронизировать · записи на устройстве сохранены');
-  } finally {
-    cloudHydrating = false;
-    if (shouldPush || hasPendingSync(target)) await pushCloudState();
-  }
-}
+function hydrateCloudState() { return runCloudSync(); }
 
 async function initCloudSync() {
-  if (!window.supabase?.createClient) {
-    setSyncStatus('Синхронизация недоступна');
-    return;
-  }
-  cloudClient = window.supabase.createClient(SYNC_CONFIG.url, SYNC_CONFIG.key);
-  const { data: { session } } = await cloudClient.auth.getSession();
-  cloudUser = session?.user || null;
-  if (syncSignOut) syncSignOut.hidden = !cloudUser;
-  if (cloudUser) {
-    await hydrateCloudState();
-  } else if (sharedSecretFromLocation()) {
-    // Keep old private-link notebooks working, but do not create a new
-    // anonymous notebook for a fresh home-screen installation.
-    await ensureSharedSync();
-    await hydrateSharedState();
-  } else {
-    setSyncStatus('Войти по email, чтобы включить автосинхронизацию');
-  }
-  cloudClient.auth.onAuthStateChange((_event, nextSession) => {
-    cloudUser = nextSession?.user || null;
-    if (syncSignOut) syncSignOut.hidden = !cloudUser;
-    if (cloudUser) setTimeout(() => hydrateCloudState(), 0);
-    else if (sharedSync) {
-      const pending = hasPendingSync('shared:' + sharedSync.secret);
-      setSyncStatus(pending ? 'Сохранено на устройстве · ожидает синхронизации' : 'Приватная ссылка синхронизирована', !pending);
-    }
-    else setSyncStatus('Войти по email, чтобы включить автосинхронизацию');
-  });
+  if(!window.supabase?.createClient){setSyncStatus('Синхронизация недоступна');return;}
+  cloudClient=window.supabase.createClient(SYNC_CONFIG.url,SYNC_CONFIG.key);
+  try {
+    const session=sharedSecretFromLocation() ? null : (await cloudClient.auth.getSession()).data.session;
+    // An explicit/shared notebook identity must not be replaced by an unrelated email session.
+    if(sharedSecretFromLocation()) {cloudUser=null;await ensureSharedSync();await hydrateSharedState();}
+    else {cloudUser=session?.user || null;if(cloudUser)await hydrateCloudState();else setSyncStatus('Записи сохраняются на устройстве · синхронизация не подключена');}
+    if(syncSignOut)syncSignOut.hidden=!cloudUser;
+    cloudClient.auth.onAuthStateChange((_event,nextSession)=>{
+      if(sharedSecretFromLocation())return;
+      const user=nextSession?.user || null,changed=user?.id!==cloudUser?.id;
+      cloudUser=user;if(syncSignOut)syncSignOut.hidden=!cloudUser;
+      if(changed && cloudUser)setTimeout(()=>hydrateCloudState(),0);
+      else if(changed)setSyncStatus('Записи сохраняются на устройстве · синхронизация не подключена');
+    });
+  } catch {setSyncStatus('Синхронизация недоступна · локальная копия сохранена');}
 }
 
 // A browser with an active session always refreshes when the notebook becomes
@@ -1734,7 +1752,7 @@ function renderDailyInspiration() {
     changed = changed || before !== JSON.stringify(entry);
   }
   // Generated daily artwork is a local cache, not an unsent user edit.
-  if (changed) localStorage.setItem('night-notes-v1', JSON.stringify(state));
+  if (changed && !startupStorageError && !damagedNotebook) localStorage.setItem('night-notes-v1', JSON.stringify(state));
   $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
   const showArtwork = (node, fallback) => {
     node.onerror = () => { node.onerror = null; node.src = fallback; };
@@ -1803,4 +1821,45 @@ $('#budgetCategoryForm').addEventListener('submit', event => {
   transactionCategory.dispatchEvent(new Event('change', {bubbles:true}));
   renderBudget();
   categoryDialog.close();
+});
+
+
+function showStorageRecovery() {
+  const banner=$('#storageRecovery');banner.hidden=!damagedNotebook && !startupStorageError;
+}
+$('#downloadDamagedNotebook')?.addEventListener('click',()=>downloadJson(damagedNotebook || localStorage.getItem('night-notes-damaged-v1') || '{}','night-notes-recovery.json'));
+$('#openBackupImport')?.addEventListener('click',()=>{$('#syncAccount').click();$('#dataFileInput').click();});
+function showSyncConflict() {
+  let item=null;try{item=JSON.parse(localStorage.getItem(SYNC_CONFLICT_KEY)||'null')}catch{}
+  $('#syncConflict').hidden=!item;
+}
+$('#downloadSyncConflict')?.addEventListener('click',()=>downloadJson(localStorage.getItem(SYNC_CONFLICT_KEY)||'{}','night-notes-both-versions.json'));
+async function resolveSyncConflict(preference) {
+  const item=JSON.parse(localStorage.getItem(SYNC_CONFLICT_KEY)||'null');if(!item)return;
+  if((syncTarget() || 'local')!==item.target){setSyncStatus('Открой исходный блокнот для выбора версии');return;}
+  const working=NotebookSync.clone(state);if(item.source==='import')delete working._sync;
+  const result=NotebookSync.merge(item.base,working,item.remote || {},preference);
+  if(item.source==='import')result.state._sync=NotebookSync.clone(state._sync);
+  localStorage.setItem('night-notes-resolved-conflict-v1',JSON.stringify(item));
+  if(item.source!=='import'){
+    const resolvedBase=NotebookSync.clone(item.remote || {});
+    resolvedBase._sync={...resolvedBase._sync,ancestors:[...new Set([...(resolvedBase._sync?.ancestors || []),item.baseline?._sync?.commit].filter(Boolean))]};
+    localStorage.setItem(SYNC_BASE_KEY,JSON.stringify({target:item.target,state:resolvedBase}));
+  }
+  const previous=NotebookSync.clone(state);
+  Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,result.state);
+  try{save();localStorage.removeItem(SYNC_CONFLICT_KEY);showSyncConflict();renderCloudState();}
+  catch{Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,previous);setSyncStatus('Не удалось сохранить выбор · обе версии сохранены');}
+}
+$('#resolveSyncLocal')?.addEventListener('click',()=>resolveSyncConflict('local').catch(()=>setSyncStatus('Не удалось сохранить выбор · обе версии сохранены')));
+$('#resolveSyncRemote')?.addEventListener('click',()=>resolveSyncConflict('remote').catch(()=>setSyncStatus('Не удалось сохранить выбор · обе версии сохранены')));
+lastSavedState=NotebookSync.clone(state);
+showStorageRecovery();showSyncConflict();
+
+$('#downloadPreviousCopy')?.addEventListener('click',()=>{
+  try{
+    const copies=['night-notes-before-sync-v2','night-notes-before-import-v1'].map(key=>JSON.parse(localStorage.getItem(key)||'null')).filter(Boolean).sort((a,b)=>(b.savedAt||0)-(a.savedAt||0));
+    if(!copies.length){$('#backupMessage').textContent='Предыдущая копия пока не создана.';return;}
+    downloadJson({format:BACKUP_FORMAT,state:copies[0].state || copies[0]},'night-notes-previous.json');
+  }catch{$('#backupMessage').textContent='Не удалось прочитать предыдущую копию.';}
 });
