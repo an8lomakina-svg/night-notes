@@ -788,6 +788,195 @@ budgetForm.addEventListener('submit', e => {
   budgetFeedback.append(confirmation, details);
   budgetSubmit.textContent = '✓ Добавлено';
 });
+// Import bank operations from a screenshot. OCR runs in the browser; source images are never saved in the notebook.
+const receiptImportInput = $('#receiptImportImage');
+const receiptImportButton = $('#receiptImportButton');
+const receiptImportReview = $('#receiptImportReview');
+const receiptImportStatus = $('#receiptImportStatus');
+const receiptImportRows = $('#receiptImportRows');
+const receiptImportSave = $('#receiptImportSave');
+let receiptImportDraft = [];
+
+function loadReceiptOcr() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (window.receiptOcrLoading) return window.receiptOcrLoading;
+  window.receiptOcrLoading = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.async = true;
+    script.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error('ocr_unavailable'));
+    script.onerror = () => reject(new Error('ocr_load_failed'));
+    document.head.append(script);
+  });
+  return window.receiptOcrLoading;
+}
+function receiptCurrency(token = '') {
+  const value = token.toUpperCase().replace(/\s/g, '');
+  if (value.includes('€') || value.includes('EUR')) return 'EUR';
+  if (value.includes('₽') || value.includes('RUB') || /РУБ/.test(value)) return 'RUB';
+  if (value.includes('AMD') || /ДРАМ|ԴՐԱՄ/.test(value)) return 'AMD';
+  return 'RSD';
+}
+function receiptDate(line, fallback) {
+  const iso = line.match(/\b(20\d{2})[-/.](0?[1-9]|1[0-2])[-/.]([0-2]?\d|3[01])\b/);
+  if (iso) return `${iso[1]}-${String(iso[2]).padStart(2, '0')}-${String(iso[3]).padStart(2, '0')}`;
+  const ru = line.match(/\b([0-2]?\d|3[01])[./-](0?[1-9]|1[0-2])(?:[./-](20\d{2}))?\b/);
+  if (ru) return `${ru[3] || fallback.slice(0, 4)}-${String(ru[2]).padStart(2, '0')}-${String(ru[1]).padStart(2, '0')}`;
+  return fallback;
+}
+function receiptCategory(name, type) {
+  const value = name.toLocaleLowerCase('ru');
+  if (type === 'income') {
+    if (/зарплат|salary/.test(value)) return 'Зарплата';
+    if (/возврат|refund/.test(value)) return 'Возврат';
+    if (/подар/.test(value)) return 'Подарок';
+    return 'Другое';
+  }
+  if (/taxi|yandex go|яндекс go|uber|bolt/.test(value)) return 'Такси';
+  if (/restaurant|кафе|coffee|starbucks|ресторан/.test(value)) return 'Рестораны и кофе';
+  if (/wolt|glovo|достав|delivery/.test(value)) return 'Доставка еды';
+  if (/market|supermarket|магазин|idea|maxi/.test(value)) return 'Продукты';
+  if (/аптек|pharmacy|медиц|doctor/.test(value)) return 'Аптека и здоровье';
+  if (/air|avia|airline|лет|flight/.test(value)) return 'Авиабилеты';
+  return 'Прочее';
+}
+function receiptAmountFromLine(line) {
+  const currency = '(?:EUR|RSD|RUB|AMD|€|₽|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)';
+  const pattern = new RegExp(`((?:[+−–-]\\s*)?(?:(?:${currency})\\s*)?(?:\\d{1,3}(?:[ \\u00A0,.]\\d{3})*(?:[,.]\\d{2})?|\\d+(?:[,.]\\d{2})?)\\s*(?:${currency})?)`, 'gi');
+  const matches = [...line.matchAll(pattern)].map(match => match[1]).filter(value => /[+−–-]|EUR|RSD|RUB|AMD|€|₽|дин|руб|драм|դրամ/i.test(value));
+  if (!matches.length) return null;
+  const raw = matches[matches.length - 1];
+  const negative = /^[\s]*[-−–]/.test(raw);
+  const number = raw.replace(/[^0-9,.-]/g, '').replace(/[−–]/g, '-').replace(/\s/g, '');
+  const normalized = number.includes(',') && number.includes('.') ? number.replace(/\./g, '').replace(',', '.') : number.replace(',', '.');
+  const amount = Math.abs(Number(normalized));
+  return Number.isFinite(amount) && amount > 0 ? { amount, currency: receiptCurrency(raw), negative } : null;
+}
+function receiptDirection(line, negative) {
+  const text = line.toLocaleLowerCase('ru');
+  if (negative || /списан|оплат|расход|debit|purchase|покупк/.test(text)) return 'expense';
+  if (/\+|зачисл|поступ|зарплат|возврат|income|credit/.test(text)) return 'income';
+  return 'expense';
+}
+function receiptName(line, fallback) {
+  const cleaned = line
+    .replace(/[+−–-]?\s*(?:EUR|RSD|RUB|AMD|€|₽|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)?\s*\d[\d\s.,]*\s*(?:EUR|RSD|RUB|AMD|€|₽|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)?/gi, '')
+    .replace(/\b(?:20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[./-]\d{1,2}(?:[./-]20\d{2})?|\d{1,2}:\d{2})\b/g, '')
+    .replace(/[|•]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  return cleaned.length >= 2 ? cleaned.slice(0, 80) : fallback;
+}
+function extractReceiptTransactions(text) {
+  const lines = text.replace(/\r/g, '').split('\n').map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const fallbackDate = dateKey(new Date());
+  const result = [];
+  lines.forEach((line, index) => {
+    const found = receiptAmountFromLine(line);
+    if (!found) return;
+    const context = [lines[index - 1] || '', line, lines[index + 1] || ''].join(' ');
+    const type = receiptDirection(context, found.negative);
+    const time = context.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/)?.[0] || '';
+    result.push({
+      id: `receipt-${Date.now()}-${index}`,
+      selected: true,
+      name: receiptName(line, type === 'income' ? 'Поступление' : 'Операция по карте'),
+      amount: found.amount,
+      currency: found.currency,
+      type,
+      category: receiptCategory(context, type),
+      date: receiptDate(context, fallbackDate),
+      time,
+      source: line
+    });
+  });
+  return result.filter((item, index, all) => all.findIndex(other => other.name === item.name && other.amount === item.amount && other.date === item.date) === index).slice(0, 30);
+}
+function renderReceiptImport() {
+  receiptImportRows.innerHTML = '';
+  const categories = type => budgetCategoriesFor(type);
+  receiptImportDraft.forEach((item, index) => {
+    const row = document.createElement('article');
+    row.className = 'receipt-import-row';
+    row.innerHTML = '<label class="receipt-check"><input type="checkbox" checked aria-label="Добавить эту операцию"/><span></span></label><div class="receipt-import-fields"><input class="receipt-name" aria-label="Название операции"/><div class="receipt-compact-fields"><input class="receipt-date" type="date" aria-label="Дата операции"/><input class="receipt-amount" type="number" inputmode="decimal" min="0.01" step="0.01" aria-label="Сумма"/><select class="receipt-currency" aria-label="Валюта"><option>RSD</option><option>EUR</option><option>RUB</option><option>AMD</option></select></div><div class="receipt-compact-fields"><select class="receipt-type" aria-label="Тип операции"><option value="expense">Расход</option><option value="income">Доход</option></select><select class="receipt-category" aria-label="Категория"></select></div><small></small></div>';
+    const checked = row.querySelector('input[type="checkbox"]');
+    const setCategories = () => {
+      const select = row.querySelector('.receipt-category');
+      const options = categories(item.type);
+      select.replaceChildren(...options.map(value => new Option(value, value)));
+      select.value = options.includes(item.category) ? item.category : options[0];
+      item.category = select.value;
+    };
+    const bind = (selector, key) => row.querySelector(selector).addEventListener('input', event => { item[key] = event.target.value; });
+    checked.checked = item.selected;
+    checked.onchange = () => { item.selected = checked.checked; row.classList.toggle('is-skipped', !item.selected); receiptImportSave.disabled = !receiptImportDraft.some(entry => entry.selected); };
+    row.classList.toggle('is-skipped', !item.selected);
+    row.querySelector('.receipt-name').value = item.name;
+    row.querySelector('.receipt-date').value = item.date;
+    row.querySelector('.receipt-amount').value = item.amount;
+    row.querySelector('.receipt-currency').value = item.currency;
+    row.querySelector('.receipt-type').value = item.type;
+    setCategories();
+    bind('.receipt-name', 'name'); bind('.receipt-date', 'date'); bind('.receipt-amount', 'amount'); bind('.receipt-currency', 'currency');
+    row.querySelector('.receipt-type').onchange = event => { item.type = event.target.value; item.category = receiptCategory(item.name, item.type); setCategories(); };
+    row.querySelector('.receipt-category').onchange = event => { item.category = event.target.value; };
+    row.querySelector('small').textContent = item.source;
+    receiptImportRows.append(row);
+  });
+  receiptImportSave.disabled = !receiptImportDraft.some(item => item.selected);
+}
+async function startReceiptImport(file) {
+  if (!file) return;
+  receiptImportInput.value = '';
+  receiptImportReview.hidden = false;
+  receiptImportRows.innerHTML = '';
+  if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
+    receiptImportStatus.textContent = 'Выбери скриншот в формате изображения до 8 МБ.';
+    return;
+  }
+  receiptImportStatus.textContent = 'Считываю операции со скриншота…';
+  receiptImportSave.disabled = true;
+  try {
+    const Tesseract = await loadReceiptOcr();
+    const result = await Tesseract.recognize(file, 'rus+eng', { logger: event => {
+      if (event.status === 'recognizing text') receiptImportStatus.textContent = `Считываю текст: ${Math.round((event.progress || 0) * 100)}%`;
+    }});
+    receiptImportDraft = extractReceiptTransactions(result.data.text || '');
+    if (!receiptImportDraft.length) {
+      receiptImportStatus.textContent = 'Операций не нашлось. Нужен более чёткий скриншот, где видны сумма и валюта.';
+      return;
+    }
+    receiptImportStatus.textContent = `Нашлось ${receiptImportDraft.length} операций. Проверь перед добавлением: распознавание может ошибаться.`;
+    renderReceiptImport();
+  } catch (error) {
+    receiptImportStatus.textContent = 'Не получилось прочитать этот скриншот. Попробуй более чёткое изображение или добавь операции вручную.';
+  }
+}
+receiptImportButton?.addEventListener('click', () => receiptImportInput.click());
+receiptImportInput?.addEventListener('change', event => startReceiptImport(event.target.files?.[0]));
+$('#receiptImportClose')?.addEventListener('click', () => { receiptImportReview.hidden = true; receiptImportDraft = []; });
+receiptImportSave?.addEventListener('click', () => {
+  const selected = receiptImportDraft.filter(item => item.selected).map((item, index) => ({
+    ...item,
+    amount: Number(item.amount),
+    createdAt: new Date(`${item.date || dateKey(new Date())}T${item.time || '12:00'}:${String(index).padStart(2, '0')}`).toISOString(),
+    id: recordId(), account: '', fromAccount: '', toAccount: '', comment: 'Добавлено со скриншота'
+  })).filter(item => item.name.trim() && Number.isFinite(item.amount) && item.amount > 0 && item.date && budgetCategoriesFor(item.type).includes(item.category));
+  if (!selected.length) {
+    receiptImportStatus.textContent = 'Отметь хотя бы одну корректно заполненную операцию.';
+    return;
+  }
+  state.budget.transactions.push(...selected);
+  try { save(); } catch (error) {
+    state.budget.transactions = state.budget.transactions.filter(item => !selected.includes(item));
+    receiptImportStatus.textContent = 'Не удалось сохранить. Попробуй добавить меньше операций.';
+    return;
+  }
+  renderBudget();
+  receiptImportStatus.textContent = `Готово: добавлено ${selected.length} операций.`;
+  receiptImportRows.innerHTML = '';
+  receiptImportSave.disabled = true;
+  receiptImportDraft = [];
+});
+
 const HEALTH_FILE_LIMIT = 1 * 1024 * 1024;
 const HEALTH_TOTAL_FILE_LIMIT = Math.floor(1.5 * 1024 * 1024);
 let healthDraftFiles = [];
@@ -1522,7 +1711,7 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=52')) budgetStylesheet.href = 'styles.css?v=52&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=54')) budgetStylesheet.href = 'styles.css?v=54&journey=1';
 mountBudgetJourney();
 renderBudget();
 
