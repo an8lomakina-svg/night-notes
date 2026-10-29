@@ -1961,6 +1961,11 @@ function normalizeInspirationArchive() {
   state.inspirationArchive = [...byDate.values()].sort((a,b) => String(b.date).localeCompare(String(a.date)));
   state.inspirationArchive.forEach(item => Object.assign(item, { date:item.date, ...inspirationCatalog[dailyInspirationIndex(item.date)] }));
 }
+function clearPreStartInspirationArchive(startedOn) {
+  const before = state.archive?.length || 0;
+  state.archive = (state.archive || []).filter(entry => entry.source !== 'daily-inspiration' || entry.payload?.date >= startedOn);
+  return state.archive.length !== before;
+}
 function archivePastInspiration(today) {
   state.archive ??= [];
   const startedOn = state.dailyInspirationArchiveStart || today;
@@ -2000,12 +2005,14 @@ function renderDailyInspiration() {
   // Start archiving from today's card forward; older cards remain untouched.
   const archiveStartChanged = !state.dailyInspirationArchiveStart;
   state.dailyInspirationArchiveStart ??= key;
+  // Discard the one-off historical entry created before the archive start date; nothing is backfilled.
+  const removedBeforeStart = clearPreStartInspirationArchive(state.dailyInspirationArchiveStart);
   // Yesterday's complete card is preserved in the shared, main archive once a new day starts.
   const archiveChanged = archivePastInspiration(key);
-  if ((changed || archiveStartChanged || archiveChanged) && !startupStorageError && !damagedNotebook) {
+  if ((changed || archiveStartChanged || removedBeforeStart || archiveChanged) && !startupStorageError && !damagedNotebook) {
     try { save(); } catch { localStorage.setItem('night-notes-v1', JSON.stringify(state)); }
   }
-  if (archiveChanged) renderArchive();
+  if (archiveChanged || removedBeforeStart) renderArchive();
   $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
   const showArtwork = (node, fallback) => {
     node.onerror = () => { node.onerror = null; node.src = fallback; };
