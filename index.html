@@ -198,6 +198,26 @@
 @media (max-width:900px) and (min-width:761px) {
   #budget .budget-entry-card .transfer-account-field { grid-column:1 / -1; }
 }
+</style><style id="simpler-sync-dialog">
+#syncDialog .sync-dialog-card { max-width:510px; }
+#syncDialog .sync-intro { margin:10px 0 18px; color:#765a46; line-height:1.45; }
+#syncDialog .sync-main-action { display:grid; gap:10px; padding:16px; border:1px solid rgba(184,104,49,.34); border-radius:10px; background:rgba(245,229,207,.52); }
+#syncDialog .sync-main-action h3 { margin:0; color:#493125; font:500 20px "Playfair Display",serif; }
+#syncDialog .sync-main-action p,#syncDialog .sync-main-action small { margin:0; color:#765a46; font-size:13px; line-height:1.45; }
+#syncDialog .sync-main-action small { font-size:11px; }
+#syncDialog .sync-share-button { width:100%; min-height:46px; background:#c87532; border-color:#c87532; color:#fffaf2; font-weight:700; }
+#syncDialog .share-link { width:100%; min-height:42px; padding:8px 10px; border:1px solid var(--line); background:#fffdf8; color:#493125; font:13px "DM Mono",monospace; }
+#syncDialog .sync-optional { margin-top:10px; border-top:1px solid var(--line); }
+#syncDialog .sync-optional summary { min-height:46px; padding:14px 0; color:#5b3d26; cursor:pointer; font-weight:600; }
+#syncDialog .sync-optional-body { display:grid; gap:12px; padding:0 0 15px; }
+#syncDialog .sync-optional-body>p { margin:0; color:#765a46; font-size:13px; line-height:1.45; }
+#syncDialog .sync-backup-actions { display:flex; flex-wrap:wrap; gap:8px; }
+#syncDialog .sync-backup-actions button,#syncDialog .existing-notebook button { min-height:40px; margin:0; }
+#syncDialog .existing-notebook { margin:0; padding-top:14px; }
+#syncDialog .existing-notebook label { font-weight:600; }
+#syncDialog .sync-conflict { margin-top:12px; padding:14px; border:1px solid rgba(175,74,51,.35); background:#fff7ed; }
+#syncDialog .sync-conflict[hidden] { display:none; }
+@media(max-width:520px) { #syncDialog .sync-backup-actions,#syncDialog .existing-notebook div { display:grid; grid-template-columns:1fr; } #syncDialog .sync-email-login { grid-template-columns:1fr; } }
 </style></head>
   <body>
     <div class="grain"></div>
@@ -319,17 +339,50 @@
     <aside id="installRecovery" hidden role="status"><p>Открыт пустой блокнот. Чтобы вернуть свои записи, подключи прежнюю приватную ссылку.</p><button type="button" id="openInstallRecovery">Подключить мои записи</button></aside>
     <dialog id="syncDialog" class="sync-dialog">
       <form method="dialog" class="sync-dialog-card">
-        <p class="eyebrow">ONE NOTEBOOK, EVERYWHERE</p>
-        <h2>Автосинхронизация</h2>
-        <p id="notebookSaveStatus" role="status" aria-live="polite"></p><p id="syncMessage">Создай одну приватную ссылку и открывай её в любом браузере — там будет тот же блокнот.</p>
-        <div class="sync-email-login">
-          <input id="syncEmail" type="email" autocomplete="email" placeholder="твой email" aria-label="Email для синхронизации" />
-          <button id="requestSyncCode" type="button" class="outline-button">Продолжить по email</button>
-        </div>
-        <p class="sync-email-note">Вход по email — альтернативный способ синхронизации. Подтверди вход из письма один раз в новом браузере.</p>
-        <div class="sync-dialog-actions-primary"><button id="createShareLink" type="button" class="outline-button">Создать приватную ссылку</button></div>
-        <input id="shareLink" class="share-link" type="url" readonly hidden aria-label="Приватная ссылка на блокнот" />
-        <div class="existing-notebook"><button id="downloadPreviousCopy" type="button">Скачать предыдущую копию</button><button id="importData" type="button">Загрузить копию</button><input id="dataFileInput" type="file" accept=".json,application/json" hidden /><p id="backupMessage" role="status"></p></div><div id="syncConflict" class="existing-notebook" hidden><p>Одна запись изменена по-разному. Обе версии сохранены. Выбери, какие изменения оставить при объединении.</p><button id="downloadSyncConflict" type="button">Скачать обе версии</button><button id="resolveSyncLocal" type="button">Изменения этого устройства</button><button id="resolveSyncRemote" type="button">Изменения из облака</button></div><div class="existing-notebook"><label for="existingNotebookLink">Уже есть блокнот? Вставь его приватную ссылку</label><input id="existingNotebookLink" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/?sync=…" /><button type="button" id="connectExistingNotebook">Подключить мои записи</button><button type="button" id="backupBeforeConnect">Скачать копию</button><p id="existingNotebookMessage" role="status" aria-live="polite"></p></div><p class="sync-privacy-note">Открой эту ссылку в другом браузере или на устройстве — там будет тот же блокнот. Не пересылай её: тот, у кого есть ссылка, сможет открыть твои записи.</p>
+        <p class="eyebrow">СИНХРОНИЗАЦИЯ</p>
+        <h2>Твой блокнот сохранён</h2>
+        <p id="notebookSaveStatus" role="status" aria-live="polite"></p>
+        <p id="syncMessage" class="sync-intro">Открой блокнот на другом устройстве по приватной ссылке.</p>
+
+        <section class="sync-main-action" aria-labelledby="syncShareTitle">
+          <h3 id="syncShareTitle">Открыть на другом устройстве</h3>
+          <p>Нажми кнопку, затем вставь скопированную ссылку в браузере другого устройства.</p>
+          <button id="createShareLink" type="button" class="outline-button sync-share-button">Скопировать мою ссылку</button>
+          <input id="shareLink" class="share-link" type="url" readonly hidden aria-label="Приватная ссылка на блокнот" />
+          <small>Ссылка даёт доступ к записям — не отправляй её посторонним.</small>
+        </section>
+
+        <details class="sync-optional">
+          <summary>Войти по email</summary>
+          <div class="sync-optional-body">
+            <p>Подтверди вход из письма один раз в новом браузере — это альтернатива приватной ссылке.</p>
+            <div class="sync-email-login">
+              <input id="syncEmail" type="email" autocomplete="email" placeholder="твой email" aria-label="Email для синхронизации" />
+              <button id="requestSyncCode" type="button" class="outline-button">Продолжить по email</button>
+            </div>
+          </div>
+        </details>
+
+        <details class="sync-optional">
+          <summary>Резервные копии и подключение</summary>
+          <div class="sync-optional-body">
+            <div class="sync-backup-actions">
+              <button id="downloadPreviousCopy" type="button">Скачать предыдущую копию</button>
+              <button id="importData" type="button">Загрузить копию</button>
+              <input id="dataFileInput" type="file" accept=".json,application/json" hidden />
+            </div>
+            <p id="backupMessage" role="status"></p>
+            <div class="existing-notebook">
+              <label for="existingNotebookLink">Есть ссылка на прежний блокнот?</label>
+              <input id="existingNotebookLink" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/?sync=…" />
+              <div><button type="button" id="connectExistingNotebook">Подключить этот блокнот</button><button type="button" id="backupBeforeConnect">Скачать копию перед подключением</button></div>
+              <p id="existingNotebookMessage" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+        </details>
+
+        <div id="syncConflict" class="sync-conflict" hidden><p>Одна запись изменена по-разному. Обе версии сохранены. Выбери, какие изменения оставить при объединении.</p><button id="downloadSyncConflict" type="button">Скачать обе версии</button><button id="resolveSyncLocal" type="button">Изменения этого устройства</button><button id="resolveSyncRemote" type="button">Изменения из облака</button></div>
+        <p class="sync-privacy-note">Одна и та же приватная ссылка открывает один и тот же блокнот в любом браузере.</p>
         <div class="sync-dialog-actions"><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
       </form>
     </dialog>
