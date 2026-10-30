@@ -739,7 +739,7 @@ function budgetCategoriesFor(type) {
     seen.add(key); return true;
   });
 }
-const escapeBudgetCategory = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function escapeBudgetCategory(value) { return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function refreshTransactionForm(){
   if (transactionType.value === 'transfer') transactionType.value = 'expense';
   const type=transactionType.value;
