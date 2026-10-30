@@ -1640,6 +1640,35 @@ requestSyncCode?.addEventListener('click', async () => {
   } finally { requestSyncCode.disabled = false; }
 });
 
+$('#completeEmailLink')?.addEventListener('click', async () => {
+  const input=$('#emailLoginLink'),message=$('#emailLoginLinkMessage');
+  let link;
+  try { link=new URL(input?.value.trim()); } catch { if(message)message.textContent='Вставь полную ссылку из письма.'; return; }
+  if(!cloudClient){if(message)message.textContent='Синхронизация ещё запускается. Подожди секунду и повтори.';return;}
+  const appOrigin=window.location.origin,authOrigin=new URL(SYNC_CONFIG.url).origin;
+  try {
+    // A pasted callback code can be completed entirely inside the iPhone home-screen app.
+    if(link.origin===appOrigin && link.searchParams.get('code')) {
+      const {error}=await cloudClient.auth.exchangeCodeForSession(link.searchParams.get('code'));
+      if(error)throw error;
+      history.replaceState(null,'',link.pathname + link.hash);
+      if(message)message.textContent='Вход подтверждён. Загружаю записи…';
+      return;
+    }
+    // Supabase's original magic link must be opened by this web app so its session
+    // is written into this app's own iOS storage partition.
+    if(link.origin===authOrigin && link.pathname.includes('/auth/v1/verify')) {
+      window.location.assign(link.href);
+      return;
+    }
+    throw new Error('invalid_link');
+  } catch(error) {
+    if(message)message.textContent=error?.message==='invalid_link'
+      ? 'Это не одноразовая ссылка для входа Night Notes. Открой письмо и скопируй ссылку из него.'
+      : 'Не удалось подтвердить вход. Запроси новое письмо и попробуй ещё раз.';
+  }
+});
+
 $('#syncAccount').onclick = () => {
   if (!syncDialog) return;
   if (cloudUser) {
