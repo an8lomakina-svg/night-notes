@@ -720,14 +720,22 @@ const budgetEntriesByDate = (entries = state.budget.transactions) => [...entries
   if (leftCreated !== null && rightCreated !== null) return (leftCreated - rightCreated) * direction;
   return 0;
 });
-function renderBudget(){ const tx=state.budget.transactions;const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts=Object.create(null);filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${escapeBudgetCategory(key)}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction'+(item.type==='planned'?' transaction-planned':'');row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${item.fromAccount} → ${item.toAccount} · `:'';row.querySelector('small').textContent=`${item.type==='planned'?'Запланировано · ':''}${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':item.type==='planned'?'◷ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
+function renderBudget(){ const tx=state.budget.transactions;const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts=Object.create(null);filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${escapeBudgetCategory(key)}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction'+(item.type==='planned'?' transaction-planned':'');row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${accountLabel(item.fromAccount)} → ${accountLabel(item.toAccount)} · `:'';row.querySelector('small').textContent=`${item.type==='planned'?'Запланировано · ':''}${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':item.type==='planned'?'◷ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
 $('#transactionDate').value=new Date().toISOString().slice(0,10);
 $('#budgetCurrencyFilter').onchange=renderBudget;
 const expenseCategories=['Доставка еды','Рестораны и кофе','Продукты','Такси','Авиабилеты','Дом и аренда','Стоматолог','Аптека и здоровье','Массаж и уход','Связь и подписки','Мобильный кэш · Катя','Красота','Досуг','Прочее'];
 const incomeCategories=['Зарплата','Займ','Перевод от себя','Возврат','Подарок','Другое'];
+const budgetAccounts = [
+  { id: 'am-eur', label: 'Армянский · EUR', currency: 'EUR' },
+  { id: 'am-amd', label: 'Армянский · AMD', currency: 'AMD' },
+  { id: 'rs-eur', label: 'Сербский · EUR', currency: 'EUR' },
+  { id: 'rs-rsd', label: 'Сербский · RSD', currency: 'RSD' }
+];
+const accountById = id => budgetAccounts.find(account => account.id === id);
+const accountLabel = id => accountById(id)?.label || id;
 const transactionType=$('#transactionType'), transactionCategory=$('#transactionCategory'), transferFrom=$('#transferFrom'), transferTo=$('#transferTo');
-transactionType.querySelector('option[value="transfer"]')?.remove();
 function budgetCategoriesFor(type) {
+  if (type === 'transfer') return ['Перевод между своими счетами'];
   const kind = type === 'income' ? 'income' : 'expense';
   const defaults = kind === 'income' ? incomeCategories : expenseCategories;
   const custom = state.budget.customCategories?.[kind];
@@ -740,19 +748,38 @@ function budgetCategoriesFor(type) {
   });
 }
 function escapeBudgetCategory(value) { return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function populateTransferAccounts() {
+  const sourceOptions = budgetAccounts.map(account => `<option value="${account.id}">${account.label}</option>`).join('');
+  if (!transferFrom.options.length) transferFrom.innerHTML = sourceOptions;
+  if (!accountById(transferFrom.value)) transferFrom.value = 'am-eur';
+  const source = accountById(transferFrom.value);
+  const targets = budgetAccounts.filter(account => account.id !== source.id && account.currency === source.currency);
+  transferTo.innerHTML = targets.map(account => `<option value="${account.id}">${account.label}</option>`).join('');
+  if (!targets.some(account => account.id === transferTo.value)) transferTo.value = targets[0]?.id || '';
+  $('#transactionCurrency').value = source.currency;
+  $('#transactionCurrency').disabled = true;
+  const name = $('#transactionName');
+  if (!name.value.trim()) name.value = `Перевод: ${source.label} → ${accountLabel(transferTo.value)}`;
+}
 function refreshTransactionForm(){
-  if (transactionType.value === 'transfer') transactionType.value = 'expense';
   const type=transactionType.value;
+  const isTransfer = type === 'transfer';
   const categories=budgetCategoriesFor(type);
   const previous=transactionCategory.value;
-  transactionCategory.required=true;
+  transactionCategory.required=!isTransfer;
   transactionCategory.innerHTML=`<option value="" disabled>Выберите категорию</option>${categories.map(category=>`<option>${escapeBudgetCategory(category)}</option>`).join('')}`;
-  transactionCategory.value=categories.includes(previous)?previous:'';
-  transferFrom.hidden=transferTo.hidden=true;
-  transferFrom.required=transferTo.required=false;
-  transactionCategory.disabled=false;
+  transactionCategory.value=isTransfer ? categories[0] : (categories.includes(previous)?previous:'');
+  transferFrom.hidden=transferTo.hidden=!isTransfer;
+  transferFrom.required=transferTo.required=isTransfer;
+  transactionCategory.disabled=isTransfer;
+  $('#transactionCurrency').disabled=isTransfer;
+  if (isTransfer) populateTransferAccounts();
 }
 transactionType.onchange=refreshTransactionForm;
+transferFrom.onchange=populateTransferAccounts;
+transferTo.onchange=() => {
+  if (transactionType.value === 'transfer' && !$('#transactionName').value.trim()) populateTransferAccounts();
+};
 refreshTransactionForm();
 const budgetForm = $('#budgetForm');
 const budgetSubmit = budgetForm.querySelector('button[type="submit"]');
@@ -795,7 +822,8 @@ budgetForm.addEventListener('submit', e => {
   const invalid = !name.value.trim() ? [name, 'Введите название операции.']
     : !amount.value || !Number.isFinite(amountValue) || amountValue <= 0 || !amount.validity.valid ? [amount, 'Введите сумму больше нуля, не более двух знаков после запятой.']
     : !date.value || !date.validity.valid ? [date, 'Укажите дату операции.']
-    : !budgetCategoriesFor(type).includes(transactionCategory.value) ? [transactionCategory, 'Выберите категорию операции.']
+    : type === 'transfer' && (!accountById(transferFrom.value) || !accountById(transferTo.value) || transferFrom.value === transferTo.value || accountById(transferFrom.value).currency !== accountById(transferTo.value).currency) ? [transferTo, 'Выберите разные свои счета в одной валюте.']
+    : type !== 'transfer' && !budgetCategoriesFor(type).includes(transactionCategory.value) ? [transactionCategory, 'Выберите категорию операции.']
     : null;
   if (invalid) {
     invalid[0].setAttribute('aria-invalid', 'true');
@@ -804,7 +832,8 @@ budgetForm.addEventListener('submit', e => {
     return;
   }
   const recordedAt = new Date();
-  const item = {id:recordId(),createdAt:recordedAt.toISOString(),name:name.value.trim(),amount:amountValue,type,category:transactionCategory.value,currency:$('#transactionCurrency').value,date:date.value,account:$('#transactionAccount')?.value||'',fromAccount:'',toAccount:'',comment:comment.value.trim()};
+  const isTransfer = type === 'transfer';
+  const item = {id:recordId(),createdAt:recordedAt.toISOString(),name:name.value.trim(),amount:amountValue,type,category:isTransfer ? 'Перевод между своими счетами' : transactionCategory.value,currency:$('#transactionCurrency').value,date:date.value,account:isTransfer ? '' : ($('#transactionAccount')?.value||''),fromAccount:isTransfer ? transferFrom.value : '',toAccount:isTransfer ? transferTo.value : '',comment:comment.value.trim()};
   state.budget.transactions.push(item);
   try {
     save();
@@ -1231,13 +1260,7 @@ renderBudget = () => {
 };
 renderBudget();
 
-const budgetAccounts = [
-  { id: 'am-eur', label: 'Армянский · EUR', currency: 'EUR' },
-  { id: 'am-amd', label: 'Армянский · AMD', currency: 'AMD' },
-  { id: 'rs-eur', label: 'Сербский · EUR', currency: 'EUR' },
-  { id: 'rs-rsd', label: 'Сербский · RSD', currency: 'RSD' }
-];
-const accountById = id => budgetAccounts.find(account => account.id === id);
+
 
 // Editing a journal row keeps the original operation and its sync identifier.
 const renderBudgetWithComments = renderBudget;
@@ -1803,7 +1826,12 @@ function mountBudgetAccounts() {
     currencySelect.value = account.currency;
     currencySelect.dispatchEvent(new Event('change'));
   };
-  transactionType.addEventListener('change', updateLabel);
+  transactionType.addEventListener('change', () => {
+    updateLabel();
+    const isTransfer = transactionType.value === 'transfer';
+    control.hidden = isTransfer;
+    if (isTransfer) { label.hidden = true; toggle.textContent = '＋ счёт'; }
+  });
   updateLabel();
 }
 mountBudgetAccounts();
