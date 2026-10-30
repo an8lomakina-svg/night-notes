@@ -1690,11 +1690,15 @@ $('#completeEmailLink')?.addEventListener('click', async () => {
 
 $('#syncAccount').onclick = () => {
   if (!syncDialog) return;
+  if (!cloudUser && !sharedSecretFromLocation() && !hasNotebookEntries(state)) { openRecoveryDialog({homeScreen:true});return; }
+  $('#createShareLink').hidden=Boolean(cloudUser);
+  $('#syncShareTitle').textContent=cloudUser ? 'Те же записи на другом устройстве' : 'Один блокнот по одной ссылке';
+  $('#syncShareHelp').textContent=cloudUser ? 'Открой дополнительные настройки в ярлыке и войди с тем же email.' : 'Открывай эту ссылку в браузере или сохраняй её в закладки. Записи загружаются и сохраняются автоматически.';
   if (cloudUser) {
     syncMessage.textContent = `Автосинхронизация включена для ${cloudUser.email || 'твоего аккаунта'}.`;
     syncSignOut.hidden = false;
   } else {
-    syncMessage.textContent = sharedSync ? 'Приватный блокнот подключён. Открывай эту же ссылку в других браузерах.' : 'Создай приватную ссылку и открывай её в любом браузере — там будет тот же блокнот. Вход по email остаётся альтернативой.';
+    syncMessage.textContent = sharedSync ? 'Записи синхронизируются автоматически.' : 'Сейчас записи сохранены в этом браузере.';
     syncSignOut.hidden = true;
   }
   syncDialog.showModal();
@@ -1728,9 +1732,10 @@ $('#createShareLink')?.addEventListener('click', async () => {
     shareLink.hidden = false;
     let copied = true;
     try { await navigator.clipboard.writeText(link.toString()); } catch { copied = false; }
+    shareLink.hidden=copied;
     syncMessage.textContent = copied
-      ? 'Приватная ссылка скопирована. Открой именно её в каждом браузере — изменения будут появляться при возвращении к вкладке.'
-      : 'Скопируй ссылку ниже и открой именно её в каждом браузере — изменения будут появляться при возвращении к вкладке.';
+      ? 'Ссылка скопирована. Открывай её где удобно — это один и тот же блокнот.'
+      : 'Твоя ссылка готова. Скопируй её ниже и открывай где удобно.';
   } catch {
     syncMessage.textContent = 'Не удалось создать приватную ссылку. Проверь подключение и попробуй ещё раз.';
   } finally {
@@ -1751,28 +1756,34 @@ const recoveryDialog = $('#recoveryDialog');
 function openRecoveryDialog({ homeScreen = false } = {}) {
   const homeScreenHint = $('#standaloneRecoveryHint');
   if (homeScreenHint) homeScreenHint.hidden = !homeScreen;
+  syncDialog?.close();
+  $('#quickConnectSection').hidden=Boolean(cloudUser || sharedSync || hasNotebookEntries(state));
+  $('#emailNotebookSettings').open=Boolean(cloudUser);
+  $('#notebookBackupSettings').open=false;
   if (!recoveryDialog?.open) recoveryDialog?.showModal();
-  if (homeScreen) $('#existingNotebookLink')?.focus({preventScroll:true});
+  if (homeScreen) $('#pasteNotebookLink')?.focus({preventScroll:true});
 }
 function showInstallRecovery() {
   const banner = $('#installRecovery');
   if (!banner) return;
   // A missing private URL otherwise looks like a broken, empty notebook.
   // Keep recovery visible on every blank local notebook, not only in installed apps.
-  const isBlankNotebook = !cloudUser && !sharedSecretFromLocation() && !hasNotebookEntries(state);
-  banner.hidden = !isBlankNotebook;
-  // iOS home-screen apps may start in their own empty storage container.
-  // Make recovery explicit so an empty UI never looks like erased data.
-  if (isBlankNotebook && launchedFromHomeScreen()) openRecoveryDialog({ homeScreen: true });
+  banner.hidden = Boolean(cloudUser || sharedSecretFromLocation());
+  const hasEntries=hasNotebookEntries(state);
+  banner.querySelector('p').textContent=hasEntries ? 'Записи пока сохранены здесь. Создай свою ссылку, чтобы открывать их везде.' : 'Уже есть записи в браузере? Подключи их один раз.';
+  $('#openInstallRecovery').textContent=hasEntries ? 'Моя ссылка' : 'Открыть мои записи';
+  // A direct notebook link opens records without setup dialogs.
+  // With no identity, offer connection without forcing a recovery workflow.
 }
 $('#openRecoveryDialog')?.addEventListener('click', () => openRecoveryDialog());
 $('#openInstallRecovery')?.addEventListener('click', () => {
+  if(hasNotebookEntries(state)) { $('#syncAccount').click();return; }
   syncDialog?.close();
-  openRecoveryDialog();
-  $('#existingNotebookLink')?.focus({preventScroll:true});
+  openRecoveryDialog({homeScreen:true});
 });
 $('#connectExistingNotebook')?.addEventListener('click', async () => {
   const button = $('#connectExistingNotebook'), message = $('#existingNotebookMessage');
+  if(button.disabled)return;
   let link, secret;
   try {
     link = new URL($('#existingNotebookLink').value.trim());
@@ -1816,8 +1827,31 @@ $('#connectExistingNotebook')?.addEventListener('click', async () => {
   } finally { button.disabled = false; }
 });
 $('#backupBeforeConnect')?.addEventListener('click', downloadBackup);
+$('#pasteNotebookLink')?.addEventListener('click',async()=>{
+  const button=$('#pasteNotebookLink'),message=$('#existingNotebookMessage');
+  button.disabled=true;
+  try {
+    // Clipboard is read only on this explicit user gesture, never at startup.
+    const link=await navigator.clipboard.readText();
+    if(!link.trim())throw new Error('empty');
+    $('#existingNotebookLink').value=link.trim();
+    $('#connectExistingNotebook').click();
+  } catch {
+    $('#manualNotebookLink').open=true;
+    message.textContent='Нажми на поле и выбери «Вставить» — записи откроются автоматически.';
+    $('#existingNotebookLink').focus({preventScroll:true});
+  } finally {button.disabled=false;}
+});
+$('#existingNotebookLink')?.addEventListener('paste',event=>{
+  const text=event.clipboardData?.getData('text');
+  if(!text)return;
+  event.preventDefault();event.target.value=text.trim();
+  $('#connectExistingNotebook').click();
+});
 $('main').prepend($('#installRecovery'));
-showInstallRecovery();
+// Wait for the saved session before offering connection; a signed-in shortcut
+// must not flash the empty-notebook setup screen during its first download.
+
 
 setTimeout(mountBudgetJourney, 0);
 initCloudSync().finally(showInstallRecovery);

@@ -246,6 +246,12 @@
 #recoveryDialog .email-link-handoff[open] { display:grid; gap:10px; }
 #recoveryDialog .email-link-handoff[open] summary { margin-bottom:2px; }
 @media(max-width:520px) { #recoveryDialog .email-recovery-action { grid-template-columns:1fr; } }
+</style><style>
+#recoveryDialog details > summary { cursor:pointer; padding:10px 0; font-size:14px; }
+#recoveryDialog #quickConnectSection[hidden] { display:none; }
+#recoveryDialog #pasteNotebookLink { width:100%; min-height:48px; background:#493125; color:#fffaf2; }
+#manualNotebookLink[open] { display:grid; gap:10px; }
+#existingNotebookMessage:empty { display:none; }
 </style></head>
   <body>
     <div class="grain"></div>
@@ -364,40 +370,42 @@
       </main>
     </div>
     <template id="taskTemplate"><article class="task"><button class="checkbox" aria-label="Отметить выполненной"></button><span class="task-text"></span><button class="archive-action" aria-label="Архивировать задачу">В архив</button><button class="delete" aria-label="Удалить задачу">×</button></article></template>
-    <aside id="installRecovery" hidden role="status"><p>Открыт пустой блокнот. Чтобы вернуть свои записи, подключи прежнюю приватную ссылку.</p><button type="button" id="openInstallRecovery">Подключить мои записи</button></aside>
+    <aside id="installRecovery" hidden role="status"><p>Уже есть записи в браузере? Подключи их один раз.</p><button type="button" id="openInstallRecovery">Подключить мои записи</button></aside>
     <dialog id="syncDialog" class="sync-dialog">
       <form method="dialog" class="sync-dialog-card">
         <p class="eyebrow">СИНХРОНИЗАЦИЯ</p>
-        <h2>Твой блокнот сохранён</h2>
+        <h2>Мой блокнот</h2>
         <p id="notebookSaveStatus" role="status" aria-live="polite"></p>
         <p id="syncMessage" class="sync-intro">Открой блокнот на другом устройстве по приватной ссылке.</p>
         <section class="sync-main-action" aria-labelledby="syncShareTitle">
-          <h3 id="syncShareTitle">Открыть на другом устройстве</h3>
-          <p>Скопируй ссылку и открой её в браузере другого устройства.</p>
-          <button id="createShareLink" type="button" class="outline-button sync-share-button">Скопировать мою ссылку</button>
+          <h3 id="syncShareTitle">Один блокнот по одной ссылке</h3>
+          <p id="syncShareHelp">Открывай эту ссылку в браузере или сохраняй её в закладки. Записи загружаются и сохраняются автоматически.</p>
+          <button id="createShareLink" type="button" class="outline-button sync-share-button">Скопировать ссылку</button>
           <input id="shareLink" class="share-link" type="url" readonly hidden aria-label="Приватная ссылка на блокнот" />
-          <small>Ссылка даёт доступ к записям — не отправляй её посторонним.</small><p class="sync-ios-hint"><strong>Для iPhone:</strong> открой эту ссылку в Safari или Chrome → «Поделиться» → «На экран Домой». Если появится «Открыть как веб‑приложение», выключи этот режим.</p>
+          <small>Ссылка даёт доступ к записям — не отправляй её посторонним.</small>
         </section>
-        <button id="openRecoveryDialog" type="button" class="text-button sync-recovery-link">Восстановление данных</button>
+        <button id="openRecoveryDialog" type="button" class="text-button sync-recovery-link">Дополнительные настройки</button>
         <div class="sync-dialog-actions"><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
       </form>
     </dialog>
     <dialog id="recoveryDialog" class="sync-dialog" aria-labelledby="recoveryTitle">
       <form method="dialog" class="sync-dialog-card recovery-dialog-card">
-        <p class="eyebrow">ВОССТАНОВЛЕНИЕ</p>
-        <h2 id="recoveryTitle">Данные и резервные копии</h2>
-        <p class="sync-intro">Используй эти действия, только если нужно вернуть прошлую копию или подключить другой блокнот.</p><aside id="standaloneRecoveryHint" hidden role="alert"><strong>Подключи записи из браузера</strong><p>У этого ярлыка пока нет привязки к записям. В браузере с записями нажми «Синхронизировать» → «Скопировать мою ссылку» и вставь её ниже. Достаточно сделать это один раз; пересоздавать ярлык не нужно.</p></aside>
-        <section class="recovery-section">
-          <h3>Резервные копии</h3>
-          <div class="sync-backup-actions">
-            <button id="downloadPreviousCopy" type="button">Скачать предыдущую копию</button>
-            <button id="importData" type="button">Загрузить копию</button>
-            <input id="dataFileInput" type="file" accept=".json,application/json" hidden />
-          </div>
-          <p id="backupMessage" role="status"></p>
+        <h2 id="recoveryTitle">Мои записи</h2>
+        <section class="recovery-section" id="quickConnectSection">
+          <aside id="standaloneRecoveryHint" hidden><strong>Открой свой блокнот</strong></aside>
+          <p>Вставь ссылку на свой блокнот — откроются те же записи.</p>
+          <button type="button" id="pasteNotebookLink">Вставить и открыть</button>
+          <p id="existingNotebookMessage" role="status" aria-live="polite"></p>
+          <details id="manualNotebookLink">
+            <summary>Вставить ссылку вручную</summary>
+            <label for="existingNotebookLink">Ссылка на твой блокнот</label>
+            <input id="existingNotebookLink" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Вставь скопированную ссылку" />
+            <button type="button" id="connectExistingNotebook">Открыть мои записи</button>
+          </details>
         </section>
+        <details id="emailNotebookSettings"><summary>Прежний вход по email</summary>
         <section class="recovery-section email-recovery-section">
-          <h3>Открыть с ярлыка на iPhone</h3>
+          <h3>Вход по email</h3>
           <p>Привяжи этот блокнот к email один раз. Затем на iPhone введи тот же email — записи откроются без приватной ссылки.</p>
           <label for="syncEmail">Твой email</label>
           <div class="email-recovery-action"><input id="syncEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="name@example.com" /><button id="requestSyncCode" type="button">Продолжить по email</button></div>
@@ -410,14 +418,19 @@
             <p id="emailLoginLinkMessage" role="status" aria-live="polite"></p>
           </details>
         </section>
+        </details>
+        <details id="notebookBackupSettings"><summary>Резервные копии</summary>
         <section class="recovery-section">
-          <h3>Подключить записи из браузера</h3>
-          <label for="existingNotebookLink">Вставь его приватную ссылку</label>
-          <input id="existingNotebookLink" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/?sync=…" />
-          <button type="button" id="connectExistingNotebook">Подключить этот блокнот</button>
-          <button type="button" id="backupBeforeConnect">Скачать копию перед подключением</button>
-          <p id="existingNotebookMessage" role="status" aria-live="polite"></p>
+          <h3>Резервные копии</h3>
+          <div class="sync-backup-actions">
+            <button id="downloadPreviousCopy" type="button">Скачать предыдущую копию</button>
+            <button id="importData" type="button">Загрузить копию</button>
+            <input id="dataFileInput" type="file" accept=".json,application/json" hidden />
+          </div>
+          <p id="backupMessage" role="status"></p>
         </section>
+          <button type="button" id="backupBeforeConnect">Скачать текущую копию</button>
+        </details>
         <div id="syncConflict" class="sync-conflict" hidden><p>Одна запись изменена по-разному. Обе версии сохранены. Выбери, какие изменения оставить при объединении.</p><button id="downloadSyncConflict" type="button">Скачать обе версии</button><button id="resolveSyncLocal" type="button">Изменения этого устройства</button><button id="resolveSyncRemote" type="button">Изменения из облака</button></div>
         <div class="sync-dialog-actions"><button type="submit" class="text-button">Закрыть</button></div>
       </form>
@@ -477,7 +490,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="sync-core.js?v=2"></script>
     <script src="calendar-import.js?v=2"></script>
-    <script src="app.js?v=128"></script>
+    <script src="app.js?v=129"></script>
     <script id="section-swipe-navigation">
 (() => {
   const menu = document.querySelector('.sidebar nav');
