@@ -241,6 +241,10 @@
 #recoveryDialog .email-recovery-section p { margin:0; font-size:14px; line-height:1.45; }
 #recoveryDialog .email-recovery-action { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
 #recoveryDialog .email-recovery-action button { white-space:nowrap; }
+#recoveryDialog .email-link-handoff { margin-top:4px; border-top:1px solid rgba(91,61,38,.14); padding-top:10px; }
+#recoveryDialog .email-link-handoff summary { cursor:pointer; font-weight:600; font-size:14px; }
+#recoveryDialog .email-link-handoff[open] { display:grid; gap:10px; }
+#recoveryDialog .email-link-handoff[open] summary { margin-bottom:2px; }
 @media(max-width:520px) { #recoveryDialog .email-recovery-action { grid-template-columns:1fr; } }
 </style></style></head>
   <body>
@@ -398,6 +402,13 @@
           <label for="syncEmail">Твой email</label>
           <div class="email-recovery-action"><input id="syncEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="name@example.com" /><button id="requestSyncCode" type="button">Продолжить по email</button></div>
           <p id="syncEmailMessage" role="status" aria-live="polite"></p>
+          <details class="email-link-handoff">
+            <summary>Письмо открылось в Safari, а не в ярлыке?</summary>
+            <p>Скопируй адрес страницы, которая открылась после подтверждения в письме, и вставь его сюда. Это одноразовое подтверждение входа, не приватная ссылка на блокнот.</p>
+            <label for="emailLoginLink">Ссылка из письма</label>
+            <div class="email-recovery-action"><input id="emailLoginLink" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…" /><button id="completeEmailLink" type="button">Завершить вход</button></div>
+            <p id="emailLoginLinkMessage" role="status" aria-live="polite"></p>
+          </details>
         </section>
         <section class="recovery-section">
           <h3>Подключить другой блокнот</h3>
