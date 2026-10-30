@@ -237,7 +237,7 @@
 #recoveryDialog #standaloneRecoveryHint[hidden] { display:none; }
 #recoveryDialog #standaloneRecoveryHint strong { display:block; font-size:15px; }
 #recoveryDialog #standaloneRecoveryHint p { margin:6px 0 0; font-size:13px; line-height:1.45; }
-<style id="email-sync-recovery">
+</style><style id="email-sync-recovery">
 #recoveryDialog .email-recovery-section p { margin:0; font-size:14px; line-height:1.45; }
 #recoveryDialog .email-recovery-action { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
 #recoveryDialog .email-recovery-action button { white-space:nowrap; }
@@ -246,7 +246,7 @@
 #recoveryDialog .email-link-handoff[open] { display:grid; gap:10px; }
 #recoveryDialog .email-link-handoff[open] summary { margin-bottom:2px; }
 @media(max-width:520px) { #recoveryDialog .email-recovery-action { grid-template-columns:1fr; } }
-</style></style></head>
+</style></head>
   <body>
     <div class="grain"></div>
     <div class="app-shell">
@@ -386,7 +386,7 @@
       <form method="dialog" class="sync-dialog-card recovery-dialog-card">
         <p class="eyebrow">ВОССТАНОВЛЕНИЕ</p>
         <h2 id="recoveryTitle">Данные и резервные копии</h2>
-        <p class="sync-intro">Используй эти действия, только если нужно вернуть прошлую копию или подключить другой блокнот.</p><aside id="standaloneRecoveryHint" hidden role="alert"><strong>Записи не удалены.</strong><p>Ярлык iPhone открыл пустой экземпляр. Вставь приватную ссылку на свой блокнот ниже, затем создай ярлык заново из Safari именно с этой ссылки.</p></aside>
+        <p class="sync-intro">Используй эти действия, только если нужно вернуть прошлую копию или подключить другой блокнот.</p><aside id="standaloneRecoveryHint" hidden role="alert"><strong>Подключи записи из браузера</strong><p>У этого ярлыка пока нет привязки к записям. В браузере с записями нажми «Синхронизировать» → «Скопировать мою ссылку» и вставь её ниже. Достаточно сделать это один раз; пересоздавать ярлык не нужно.</p></aside>
         <section class="recovery-section">
           <h3>Резервные копии</h3>
           <div class="sync-backup-actions">
@@ -411,7 +411,7 @@
           </details>
         </section>
         <section class="recovery-section">
-          <h3>Подключить другой блокнот</h3>
+          <h3>Подключить записи из браузера</h3>
           <label for="existingNotebookLink">Вставь его приватную ссылку</label>
           <input id="existingNotebookLink" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/?sync=…" />
           <button type="button" id="connectExistingNotebook">Подключить этот блокнот</button>
@@ -477,7 +477,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="sync-core.js?v=2"></script>
     <script src="calendar-import.js?v=2"></script>
-    <script src="app.js?v=127"></script>
+    <script src="app.js?v=128"></script>
     <script id="section-swipe-navigation">
 (() => {
   const menu = document.querySelector('.sidebar nav');

@@ -116,7 +116,21 @@ const SYNC_CONFLICT_KEY='night-notes-sync-conflict-v1';
 // This lets the one-time email callback prefer the account without losing the local copy.
 const EMAIL_MIGRATION_KEY='night-notes-email-migration-v1';
 const emailMigrationPending=()=>localStorage.getItem(EMAIL_MIGRATION_KEY)==='1';
-const finishEmailMigration=()=>localStorage.removeItem(EMAIL_MIGRATION_KEY);
+function finishEmailMigration({connected=false}={}) {
+  if (connected) {
+    // A completed migration must survive reload. Otherwise the old cookie/URL
+    // wins over the email session and silently reopens a different notebook.
+    localStorage.removeItem(SHARED_SECRET_KEY);
+    const appPath=new URL('.',location.href).pathname;
+    for(const path of new Set([appPath,appPath.replace(/\/$/,'') || '/']))
+      document.cookie=INSTALL_COOKIE+'=; Path='+path+'; Max-Age=0; Secure; SameSite=Strict';
+    const url=new URL(location.href);url.searchParams.delete('sync');
+    if(url.hash.includes('sync='))url.hash='today';
+    history.replaceState(null,'',url);
+    sharedSync=null;
+  }
+  localStorage.removeItem(EMAIL_MIGRATION_KEY);
+}
 const syncTarget = () => cloudUser ? 'user:' + cloudUser.id
   : sharedSync ? 'shared:' + sharedSync.secret
   : new URLSearchParams(location.search).get('sync') ? 'shared:' + new URLSearchParams(location.search).get('sync')
@@ -288,6 +302,10 @@ async function syncNotebook(connection,upload) {
       const remote=await connection.read();
       if(!connection.current())return false;
       if(remote && !NotebookSync.valid(remote))throw new Error('invalid_remote');
+      if(!remote && !upload && !hasPendingSync(target) && !hasNotebookEntries(state)) {
+        setSyncStatus('В облаке пока нет записей · подключи блокнот из браузера');
+        return false;
+      }
       const local=NotebookSync.clone(state),base=readSyncBase(target);
       const parallelBranch=base?._sync?.commit && remote?._sync?.commit && base._sync.commit!==remote._sync.commit && !(remote._sync.ancestors || []).includes(base._sync.commit);
       const mergeBase=parallelBranch ? undefined : base;
@@ -1510,6 +1528,7 @@ function normalizeCloudState() {
 function renderCloudState() {
   normalizeCloudState();
   refreshTransactionForm();
+  if(document.activeElement !== $('#focusInput')) $('#focusInput').value=state.focus;
   renderTasks();
   renderPlans();
   renderCalendar();
@@ -1556,7 +1575,7 @@ async function initCloudSync() {
       if(cloudUser) {
         const synced=await hydrateCloudState();
         if(migratingToEmail && synced) {
-          finishEmailMigration();
+          finishEmailMigration({connected:true});
           setSyncStatus('Записи привязаны к email · теперь они откроются после входа на iPhone',true);
         }
       } else setSyncStatus('Записи сохраняются на устройстве · синхронизация не подключена');
@@ -1570,7 +1589,7 @@ async function initCloudSync() {
       if(changed && cloudUser)setTimeout(async()=>{
         const synced=await hydrateCloudState();
         if(emailMigrationPending() && synced) {
-          finishEmailMigration();
+          finishEmailMigration({connected:true});
           setSyncStatus('Записи привязаны к email · теперь они откроются после входа на iPhone',true);
           $('#syncEmailMessage') && ($('#syncEmailMessage').textContent='Готово: этот блокнот привязан к email.');
         }
@@ -1687,6 +1706,13 @@ $('#createShareLink')?.addEventListener('click', async () => {
     syncMessage.textContent = 'Синхронизация ещё запускается. Подожди секунду и попробуй снова.';
     return;
   }
+  if (cloudUser) {
+    // Creating a share copy here used to switch the browser back to that copy
+    // on reload while the installed app continued writing to the email account.
+    syncMessage.textContent = `Этот блокнот синхронизируется по email ${cloudUser.email || ''}. В ярлыке открой «Восстановление данных» и войди с тем же email.`;
+    shareLink.hidden=true;
+    return;
+  }
   button.disabled = true;
   try {
     const sync = await ensureSharedSync({create:true});
@@ -1766,17 +1792,25 @@ $('#connectExistingNotebook')?.addEventListener('click', async () => {
   message.textContent = 'Проверяю ссылку и загружаю записи…';
   const revision = localRevision;
   try {
-    const {data,error} = await cloudClient.rpc('get_shared_notebook', {p_sync_id:await sharedId(secret)});
+    const id=await sharedId(secret);
+    const {data,error} = await cloudClient.rpc('get_shared_notebook', {p_sync_id:id});
     if (error || !data) throw new Error('missing');
     const remote = await decryptSharedState(secret, data);
-    if (!remote || !Array.isArray(remote.budget?.transactions)) throw new Error('invalid');
+    if (!NotebookSync.valid(remote)) throw new Error('invalid');
     // Never connect by uploading an empty installation over an existing notebook.
     if (localRevision !== revision || pendingSync || hasNotebookEntries(state) || cloudUser) throw new Error('local_changes');
     localStorage.setItem('night-notes-v1', JSON.stringify(remote));
     localStorage.setItem(SHARED_SECRET_KEY, secret);
     rememberSyncTarget('shared:' + secret);
     rememberInstallLink(secret);
-    location.reload();
+    localStorage.setItem(SYNC_BASE_KEY,JSON.stringify({target:'shared:'+secret,state:remote}));
+    sharedSync={secret,id};
+    Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,remote);
+    normalizeCloudState();lastSavedState=NotebookSync.clone(state);
+    renderCloudState();showInstallRecovery();
+    message.textContent='Подключено. Теперь браузер и этот ярлык используют один блокнот.';
+    setSyncStatus('Записи из браузера подключены · изменения синхронизированы',true);
+    recoveryDialog.close();
   } catch {
     message.textContent = 'Подключить не удалось. Проверь ссылку и интернет. Если здесь появились записи, сначала скачай их копию. Данные в облаке не изменены.';
   } finally { button.disabled = false; }
