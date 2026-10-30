@@ -864,7 +864,7 @@ button.health-quick-card { font:inherit; }
 .receipt-import-status { margin: 12px 0; color: var(--muted); }
 .receipt-import-rows { display:grid; gap:10px; max-height: 520px; overflow:auto; padding-right: 2px; }
 .receipt-import-row { display:grid; grid-template-columns:28px minmax(0,1fr); gap:8px; padding:12px; background:#fffaf4; border:1px solid var(--line); border-radius:10px; transition: opacity .15s ease; }
-.receipt-import-row.is-skipped { opacity:.48; }
+.receipt-import-row.is-skipped { opacity:.8; }
 .receipt-check { display:flex; align-items:flex-start; padding-top: 8px; }
 .receipt-check input { width:18px; height:18px; accent-color:var(--accent); }
 .receipt-import-fields { display:grid; gap:8px; }
@@ -904,3 +904,4 @@ button.health-quick-card { font:inherit; }
   .archive-inspiration-grid { grid-template-columns:1fr; gap:13px; }
   .archive-inspiration-grid img { max-height:280px; aspect-ratio:1.35/1; }
 }
+.receipt-import-fields small.receipt-warning { white-space:normal; color:#97591b; line-height:1.4; }

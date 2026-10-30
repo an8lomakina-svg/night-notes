@@ -1010,7 +1010,7 @@ function receiptCurrency(token = '') {
   const value = token.toUpperCase().replace(/\s/g, '');
   if (value.includes('€') || value.includes('EUR')) return 'EUR';
   if (value.includes('₽') || value.includes('RUB') || /РУБ/.test(value)) return 'RUB';
-  if (value.includes('AMD') || /ДРАМ|ԴՐԱՄ/.test(value)) return 'AMD';
+  if (value.includes('֏') || value.includes('AMD') || /ДРАМ|ԴՐԱՄ/.test(value)) return 'AMD';
   return 'RSD';
 }
 function receiptDate(line, fallback) {
@@ -1045,7 +1045,7 @@ function receiptAmountFromLine(line) {
   const negative = /^[\s]*[-−–]/.test(raw);
   const number = raw.replace(/[^0-9,.-]/g, '').replace(/[−–]/g, '-').replace(/\s/g, '');
   const normalized = number.includes(',') && number.includes('.') ? number.replace(/\./g, '').replace(',', '.') : number.replace(',', '.');
-  const amount = Math.abs(Number(normalized));
+  const amount = Math.abs(receiptDecimal(raw.replace(/[^0-9,.+−–-]/g,'')) ?? Number(normalized));
   return Number.isFinite(amount) && amount > 0 ? { amount, currency: receiptCurrency(raw), negative } : null;
 }
 function receiptDirection(line, negative) {
@@ -1133,7 +1133,126 @@ function receiptPositionedRows(data) {
   });
   return rows.slice(0,30);
 }
+function receiptAmountParts(prepared, box) {
+  if(!prepared.receiptSource)return null;
+  const source=prepared.receiptSource, scale=source.naturalWidth/prepared.width;
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.ceil(box.x1-box.x0);canvas.height=Math.ceil(box.y1-box.y0);
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(source,box.x0*scale,box.y0*scale,canvas.width*scale,canvas.height*scale,0,0,canvas.width,canvas.height);
+  const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data,runs=[];
+  let run=null;
+  for(let x=0;x<=canvas.width;x++){
+    let top=canvas.height,bottom=-1;
+    if(x<canvas.width)for(let y=0;y<canvas.height;y++){const i=(y*canvas.width+x)*4;if(pixels[i]*.299+pixels[i+1]*.587+pixels[i+2]*.114<210){top=Math.min(top,y);bottom=y;}}
+    if(bottom>=0){if(!run)run={x0:x,x1:x+1,y0:top,y1:bottom+1};else{run.x1=x+1;run.y0=Math.min(run.y0,top);run.y1=Math.max(run.y1,bottom+1);}}
+    else if(run){runs.push(run);run=null;}
+  }
+  if(runs.length<3)return null;
+  const height=Math.max(...runs.map(r=>r.y1-r.y0)),last=runs.slice(-2);
+  if(!last.every(r=>r.y1-r.y0>height*.3&&r.y1-r.y0<height*.85))return null;
+  let cut=last[0].x0;const previous=runs.at(-3);if(previous.y1-previous.y0<height*.5)cut=previous.x0;
+  const areas=[{x0:0,y0:0,x1:cut,y1:canvas.height},{x0:last[0].x0,y0:Math.min(...last.map(r=>r.y0)),x1:last[1].x1,y1:Math.max(...last.map(r=>r.y1))}];
+  return areas.map(area=>{const part=document.createElement('canvas');part.width=(area.x1-area.x0)*4+40;part.height=(area.y1-area.y0)*4+40;const p=part.getContext('2d');p.fillStyle='#fff';p.fillRect(0,0,part.width,part.height);p.drawImage(canvas,area.x0,area.y0,area.x1-area.x0,area.y1-area.y0,20,20,part.width-40,part.height-40);return part;});
+}
+async function refineReceiptAmounts(worker, prepared, data) {
+  const rows=receiptLayout(data).rows;
+  const targets=rows.map(row=>({row,parts:receiptAmountParts(prepared,row.crop)})).filter(x=>x.parts);
+  if(!targets.length)return;
+  await worker.reinitialize('eng');
+  for(const {row,parts} of targets){
+    await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'0123456789.,+-'});
+    let integer=(await worker.recognize(parts[0])).data.text.replace(/\s/g,'');
+    if(!/^[+-]?\d[\d.,]*$/.test(integer)){await worker.setParameters({tessedit_pageseg_mode:'13'});integer=(await worker.recognize(parts[0])).data.text.replace(/\s/g,'');}
+    await worker.setParameters({tessedit_pageseg_mode:'13',tessedit_char_whitelist:'0123456789'});
+    let cents=(await worker.recognize(parts[1])).data.text.replace(/\s/g,'');
+    if(!/^\d{2}$/.test(cents)){await worker.setParameters({tessedit_pageseg_mode:'7'});cents=(await worker.recognize(parts[1])).data.text.replace(/\s/g,'');}
+    let whole=/^[+-]?\d[\d.,]*$/.test(integer)?Number(integer.replace(/[.,]/g,'')):null;
+    const old=receiptDecimal(row.word.text);
+    if(old!==null&&(whole===null||Math.floor(Math.abs(old))!==Math.abs(whole))){whole=Math.trunc(old);row.word.receiptUncertain=true;}
+    if(whole!==null&&/^\d{2}$/.test(cents)){
+      const negative=/^[−–-]/.test(row.word.text)||whole<0;
+      row.word.receiptNumber=(Math.abs(whole)+Number(cents)/100)*(negative?-1:1);
+      row.word.receiptPositive=/^\+/.test(integer)||/^\+/.test(row.word.text);
+    }else row.word.receiptUncertain=true;
+  }
+  await worker.setParameters({tessedit_char_whitelist:'',tessedit_pageseg_mode:'6'});
+}
+
+function receiptDecimal(raw) {
+  const value = String(raw).replace(/[−–]/g,'-').replace(/\s/g,'');
+  if (!/^[+-]?\d[\d.,]*[.,]\d{2}$/.test(value)) return null;
+  const separator = Math.max(value.lastIndexOf('.'),value.lastIndexOf(','));
+  const integer = value.slice(0,separator).replace(/[.,]/g,'');
+  const number = Number(`${integer}.${value.slice(separator+1)}`);
+  return Number.isFinite(number) ? number : null;
+}
+function receiptMonthDate(text) {
+  const match = text.match(/\b(\d{1,2})\s+(январ\S*|феврал\S*|март\S*|апрел\S*|ма[йя]|июн\S*|июл\S*|август\S*|сентябр\S*|октябр\S*|ноябр\S*|декабр\S*)\s+(20\d{2})/i);
+  if (!match) return '';
+  const prefixes=['янв','фев','мар','апр','ма','июн','июл','авг','сен','окт','ноя','дек'];
+  const month=prefixes.findIndex(prefix=>match[2].toLowerCase().startsWith(prefix))+1;
+  return `${match[3]}-${String(month).padStart(2,'0')}-${match[1].padStart(2,'0')}`;
+}
+function receiptLayout(data) {
+  const words=(data.words||[]).filter(w=>w.text && w.bbox && ['x0','y0','x1','y1'].every(k=>Number.isFinite(w.bbox[k])));
+  if(!words.length)return {rows:[]};
+  const right=Math.max(...words.map(w=>w.bbox.x1));
+  const headers=(data.lines||[]).map(line=>({date:receiptMonthDate(line.text||''),y:line.bbox?.y0})).filter(x=>x.date&&Number.isFinite(x.y));
+  const headerCurrency=(data.text||'').match(/(?:Mastercard|Visa)[\s\S]{0,70}?\b(AMD|EUR|RSD|RUB)\b/i)?.[1]?.toUpperCase();
+  const currencyOf=text=> /^(?:EUR|€)$/i.test(text)?'EUR':/^(?:AMD|֏)$/i.test(text)?'AMD':/^(?:RSD|din)$/i.test(text)?'RSD':/^(?:RUB|₽)$/i.test(text)?'RUB':null;
+  const candidates=words.filter(w=>w.bbox.x0>right*.65 && /\d{2}/.test(w.text) && /^[+−–-]?[\dOoОо.,;]+(?:[а-яa-z]{1,2})?$/i.test(w.text) && (!headers.length || w.bbox.y0>headers[0].y));
+  const rows=[];
+  candidates.sort((a,b)=>a.bbox.y0-b.bbox.y0).forEach((word,index)=>{
+    const box=word.bbox,h=box.y1-box.y0;
+    if(h<10)return;
+    const near=words.filter(w=>w!==word && w.bbox.x0>right*.7 && w.bbox.y0>=box.y0-h*.3 && w.bbox.y0<box.y1+h*1.8);
+    const cur=near.find(w=>currencyOf(w.text));
+    const inline=cur?cur.bbox.y0<box.y1:!!headers.length;
+    const currency=cur?currencyOf(cur.text):headerCurrency;
+    if(!currency)return;
+    const next=candidates.slice(index+1).find(w=>w.bbox.y0>box.y1);
+    const bottom=Math.min(next?.bbox.y0??Infinity,box.y1+h*4);
+    const band=words.filter(w=>w.bbox.y0>=box.y0-h*.4&&w.bbox.y1<bottom);
+    const dateWord=band.find(w=>/^\d{1,2}[./-]\d{1,2}[./-]20\d{2}$/.test(w.text));
+    const header=headers.filter(x=>x.y<box.y0).at(-1);
+    const date=dateWord?receiptDate(dateWord.text,''):header?.date||'';
+    const left=inline?right*.20:dateWord?dateWord.bbox.x0-h*.25:right*.12;
+    const nameWords=band.filter(w=>w.bbox.x0>=left&&w.bbox.x1<box.x0-8&&w.bbox.y0<box.y0+h*.45);
+    nameWords.sort((a,b)=>a.bbox.x0-b.bbox.x0);
+    const kept=[];for(const w of nameWords){if(kept.length&&w.bbox.x0-kept.at(-1).bbox.x1>h*2)break;kept.push(w);}
+    let name=kept.map(w=>w.text).join(' ').replace(/[~|]/g,'').trim();
+    if(!/[a-zа-я\u0530-\u058f]/i.test(name))return;
+    const relative=band.find(w=>/^(?:Before|ago)$/i.test(w.text));
+    if(!inline){const continuation=band.filter(w=>w.bbox.x0>=left&&w.bbox.x1<box.x0-8&&w.bbox.y0>box.y0+h*.6&&w.bbox.y0<(dateWord?dateWord.bbox.y0-h*.2:box.y1+h*1.2)&&!/(?:Before|hours|ago)/i.test(w.text)&&(!relative||Math.abs(w.bbox.y0-relative.bbox.y0)>h*.5));name+=' '+continuation.map(w=>w.text).join(' ');}
+    const source=band.map(w=>w.text).join(' ');
+    const number=word.receiptNumber??receiptDecimal(word.text);
+    const type=(number<0||/^[−–-]/.test(word.text))?'expense':(/^\+/.test(word.text)||word.receiptPositive)?'income':'expense';
+    const warnings=[];
+    if(!date)warnings.push('Уточни дату: на скриншоте она относительная или обрезана.');
+    if(number===null||word.receiptUncertain)warnings.push('Проверь сумму: мелкие цифры распознаны неуверенно.');
+    const own=/transfer\s+[oо][f?]\s+own\s+funds|menjacnica/i.test(name);
+    if(own)warnings.push('Перевод своих средств или обмен валюты. Добавь через форму «Перевод».');
+    if(/незаверш|pending|reserved/i.test(source))warnings.push('Операция ещё не завершена.');
+    rows.push({word,crop:{x0:Math.max(0,box.x0-8),y0:Math.max(0,box.y0-8),x1:inline?(cur?.bbox.x0??box.x1+8)-4:cur.bbox.x1+4,y1:box.y1+10},name:name.trim().replace(/\s+\d+[»+]$/,'').slice(0,80),amount:number===null?'':Math.abs(number),currency,date,type,category:receiptCategory(name,type),time:source.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/)?.[0]||'',source,warning:warnings.join(' '),blocked:own,selected:!warnings.length,id:`receipt-layout-${Date.now()}-${index}`});
+  });
+  return {rows:rows.slice(0,30)};
+}
+function markReceiptDuplicates(rows, existing=[]) {
+  const nameKey=value=>String(value||'').toLocaleLowerCase().replace(/[^a-zа-яё\u0530-\u058f0-9]/g,'');
+  const seen=[];
+  for(const row of rows){
+    const match=other=>row.date&&row.date===other.date&&Number(row.amount)>0&&Number(row.amount)===Number(other.amount)&&row.currency===other.currency&&row.type===other.type&&(!row.time||!other.time||row.time===other.time)&&nameKey(row.name).length>=4&&nameKey(row.name)===nameKey(other.name);
+    const saved=existing.some(match),duplicate=seen.some(match);
+    if(saved||duplicate){row.selected=false;row.warning=[row.warning,saved?'Возможный повтор: такая операция уже есть в бюджете.':'Возможный повтор в этом скриншоте.'].filter(Boolean).join(' ');}
+    seen.push(row);
+  }
+  return rows;
+}
+
 function extractReceiptOcr(data) {
+  const layout=receiptLayout(data).rows;
+  if(layout.length)return layout.map(({word,crop,...row})=>row);
   const plain = extractReceiptTransactions(data.text || '');
   const positioned = receiptPositionedRows(data);
   return positioned.length && positioned.length >= plain.length ? positioned : plain;
@@ -1152,10 +1271,13 @@ async function prepareReceiptImage(file) {
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
     for (let i = 0; i < pixels.data.length; i += 4) {
-      const value = (pixels.data[i] * .299 + pixels.data[i + 1] * .587 + pixels.data[i + 2] * .114) > 215 ? 255 : 0;
+      const light = pixels.data[i] * .299 + pixels.data[i + 1] * .587 + pixels.data[i + 2] * .114;
+      const saturation = Math.max(pixels.data[i],pixels.data[i+1],pixels.data[i+2])-Math.min(pixels.data[i],pixels.data[i+1],pixels.data[i+2]);
+      const value = light > 215 || (light > 180 && saturation > 70) ? 255 : 0;
       pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = value;
     }
     ctx.putImageData(pixels, 0, 0);
+    canvas.receiptSource = image;
     return canvas;
   } finally { URL.revokeObjectURL(url); }
 }
@@ -1211,6 +1333,7 @@ function renderReceiptImport() {
     };
     const bind = (selector, key) => row.querySelector(selector).addEventListener('input', event => { item[key] = event.target.value; });
     checked.checked = item.selected;
+    checked.disabled = !!item.blocked;
     checked.onchange = () => { item.selected = checked.checked; row.classList.toggle('is-skipped', !item.selected); receiptImportSave.disabled = !receiptImportDraft.some(entry => entry.selected); };
     row.classList.toggle('is-skipped', !item.selected);
     row.querySelector('.receipt-name').value = item.name;
@@ -1222,7 +1345,9 @@ function renderReceiptImport() {
     bind('.receipt-name', 'name'); bind('.receipt-date', 'date'); bind('.receipt-amount', 'amount'); bind('.receipt-currency', 'currency');
     row.querySelector('.receipt-type').onchange = event => { item.type = event.target.value; item.category = receiptCategory(item.name, item.type); setCategories(); };
     row.querySelector('.receipt-category').onchange = event => { item.category = event.target.value; };
-    row.querySelector('small').textContent = item.source;
+    row.querySelector('small').textContent = item.warning || item.source;
+    row.querySelector('small').classList.toggle('receipt-warning', !!item.warning);
+    row.querySelector('small').title = item.source;
     receiptImportRows.append(row);
   });
   receiptImportSave.disabled = !receiptImportDraft.some(item => item.selected);
@@ -1254,26 +1379,33 @@ async function startReceiptImport(file) {
     try {
       await worker.setParameters({tessedit_pageseg_mode: '6'});
       result = await worker.recognize(prepared);
+      if (/Mastercard[\s\S]{0,70}AMD/i.test(result.data.text || '')) {
+        await worker.reinitialize('rus+eng+hye');
+        await worker.setParameters({tessedit_pageseg_mode:'6'});
+        result = await worker.recognize(prepared);
+      }
       // Latin bank screens can acquire isolated Cyrillic lookalikes in bilingual OCR.
       const text = result.data.text || '';
-      if ((text.match(/[a-z]/gi) || []).length >= 40 && /[а-яё]/i.test(text) && !/[а-яё]{3,}/i.test(text) && receiptPositionedRows(result.data).length >= 2) {
+      if ((text.match(/[a-z]/gi) || []).length >= 40 && (text.match(/[а-яё]/gi)||[]).length < (text.match(/[a-z]/gi)||[]).length*.1 && !/[\u0530-\u058f]/.test(text) && receiptLayout(result.data).rows.length >= 2) {
         await worker.reinitialize('eng');
         await worker.setParameters({tessedit_pageseg_mode: '6'});
         const latin = await worker.recognize(prepared);
         if (extractReceiptOcr(latin.data).length >= extractReceiptOcr(result.data).length) result = latin;
       }
+      await refineReceiptAmounts(worker, prepared, result.data);
       if (!extractReceiptOcr(result.data).length && prepared !== file) {
         await worker.setParameters({tessedit_pageseg_mode: '3'});
         result = await worker.recognize(file);
       }
     } finally { await worker.terminate(); }
     if (request !== receiptImportRequest) return;
-    receiptImportDraft = extractReceiptOcr(result.data);
+    receiptImportDraft = markReceiptDuplicates(extractReceiptOcr(result.data), state.budget.transactions);
     if (!receiptImportDraft.length) {
       receiptImportStatus.textContent = 'Операций не нашлось. Нужен более чёткий скриншот, где видны сумма и валюта.';
       return;
     }
-    receiptImportStatus.textContent = `Нашлось ${receiptImportDraft.length} операций. Проверь список ниже. В бюджет пока ничего не добавлено.`;
+    const duplicateCount=receiptImportDraft.filter(item=>/повтор/i.test(item.warning||'')).length;
+    receiptImportStatus.textContent = `Нашлось ${receiptImportDraft.length} операций.${duplicateCount ? ` Возможных повторов: ${duplicateCount} — галочки сняты.` : ''} Проверь список ниже. В бюджет пока ничего не добавлено.`;
     renderReceiptImport();
     receiptImportReview.focus({preventScroll: true});
     receiptImportReview.scrollIntoView({block: 'start', behavior: 'smooth'});
@@ -1286,7 +1418,12 @@ receiptImportButton?.addEventListener('click', () => receiptImportInput.click())
 receiptImportInput?.addEventListener('change', event => startReceiptImport(event.target.files?.[0]));
 $('#receiptImportClose')?.addEventListener('click', () => { receiptImportRequest++; receiptImportReview.hidden = true; receiptImportDraft = []; receiptImportRows.innerHTML = ''; receiptImportSave.disabled = true; });
 receiptImportSave?.addEventListener('click', () => {
-  const selected = receiptImportDraft.filter(item => item.selected).map((item, index) => ({
+  const choices = receiptImportDraft.filter(item => item.selected && !item.blocked);
+  if (choices.some(item => !item.date || !Number.isFinite(Number(item.amount)) || Number(item.amount)<=0)) {
+    receiptImportStatus.textContent = 'Укажи корректную дату и сумму у всех выбранных строк.';
+    return;
+  }
+  const selected = choices.map((item, index) => ({
     ...item,
     amount: Number(item.amount),
     createdAt: new Date(`${item.date || dateKey(new Date())}T${item.time || '12:00'}:${String(index).padStart(2, '0')}`).toISOString(),
