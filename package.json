@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node tests/core.cjs && node tests/ui.cjs && node tests/sync.cjs && node tests/mobile.cjs && node tests/recovery.cjs && node tests/multidevice.cjs && node tests/release-audit.cjs && node tests/sync-target-audit.cjs && node tests/shortcut.cjs",
+    "test": "node tests/core.cjs && node tests/ui.cjs && node tests/sync.cjs && node tests/mobile.cjs && node tests/recovery.cjs && node tests/multidevice.cjs && node tests/release-audit.cjs && node tests/sync-target-audit.cjs && node tests/shortcut.cjs && node tests/transfer-rate.cjs",
     "test:browser": "node tests/browser.cjs"
   },
   "devDependencies": {

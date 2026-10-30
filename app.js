@@ -830,18 +830,48 @@ function budgetCategoriesFor(type) {
   });
 }
 function escapeBudgetCategory(value) { return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function parseTransferRate(value) {
+  const text=String(value || '').trim();
+  if(!text)return null;
+  if(!/^(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(text))return NaN;
+  const rate=Number(text.replace(',','.'));return Number.isFinite(rate) && rate>0 ? rate : NaN;
+}
+function transferConversion(amount,fromId,toId,rawRate) {
+  const from=accountById(fromId),to=accountById(toId);
+  if(!from || !to || fromId===toId)throw new Error('Выберите разные свои счета.');
+  if(from.currency===to.currency)return {toCurrency:to.currency,toAmount:amount};
+  const rate=parseTransferRate(rawRate);
+  if(rate===null)return {toCurrency:to.currency};
+  const toAmount=Math.round((amount*rate+Number.EPSILON)*100)/100;
+  if(!Number.isFinite(rate)||!Number.isFinite(toAmount)||toAmount<=0)throw new Error('Укажите положительный курс: сумма зачисления должна быть не меньше 0,01.');
+  return {toCurrency:to.currency,exchangeRate:rate,toAmount};
+}
+function refreshTransferRate() {
+  const from=accountById(transferFrom.value),to=accountById(transferTo.value);
+  const visible=transactionType.value==='transfer' && from && to && from.currency!==to.currency;
+  $('#transferRateField').hidden=!visible;$('#transferRate').disabled=!visible;
+  $('#transferRateHint').textContent=visible ? `Сколько ${to.currency} за 1 ${from.currency}` : '';
+  const amount=Number($('#transactionAmount').value),rate=parseTransferRate($('#transferRate').value);
+  let preview='Без курса сумма зачисления не рассчитывается.';
+  if(visible && amount>0 && rate!==null)try{preview='Будет зачислено: '+currency(transferConversion(amount,from.id,to.id,$('#transferRate').value).toAmount,to.currency);}catch{preview='Проверь курс.';}
+  $('#transferRatePreview').textContent=visible ? preview : '';
+}
+$('#transferRate').addEventListener('input',refreshTransferRate);
+$('#transactionAmount').addEventListener('input',refreshTransferRate);
 function populateTransferAccounts() {
   const sourceOptions = budgetAccounts.map(account => `<option value="${account.id}">${account.label}</option>`).join('');
   if (!transferFrom.options.length) transferFrom.innerHTML = sourceOptions;
   if (!accountById(transferFrom.value)) transferFrom.value = 'am-eur';
   const source = accountById(transferFrom.value);
-  const targets = budgetAccounts.filter(account => account.id !== source.id && account.currency === source.currency);
+  const previousTarget=transferTo.value;
+  const targets = budgetAccounts.filter(account => account.id !== source.id);
   transferTo.innerHTML = targets.map(account => `<option value="${account.id}">${account.label}</option>`).join('');
-  if (!targets.some(account => account.id === transferTo.value)) transferTo.value = targets[0]?.id || '';
+  transferTo.value=targets.some(account=>account.id===previousTarget) ? previousTarget : (targets.find(account=>account.currency===source.currency)?.id || targets[0]?.id || '');
   $('#transactionCurrency').value = source.currency;
   $('#transactionCurrency').disabled = true;
   const name = $('#transactionName');
   if (!name.value.trim()) name.value = 'Перевод между своими счетами';
+  refreshTransferRate();
 }
 function refreshTransactionForm(){
   const type=transactionType.value;
@@ -861,12 +891,11 @@ function refreshTransactionForm(){
   if (accountControl) accountControl.hidden=isTransfer;
   $('#transactionCurrency').disabled=isTransfer;
   if (isTransfer) populateTransferAccounts();
+  refreshTransferRate();
 }
 transactionType.onchange=refreshTransactionForm;
-transferFrom.onchange=populateTransferAccounts;
-transferTo.onchange=() => {
-  if (transactionType.value === 'transfer' && !$('#transactionName').value.trim()) populateTransferAccounts();
-};
+transferFrom.onchange=()=>{$('#transferRate').value='';populateTransferAccounts();};
+transferTo.onchange=()=>{$('#transferRate').value='';refreshTransferRate();};
 refreshTransactionForm();
 const budgetForm = $('#budgetForm');
 const budgetSubmit = budgetForm.querySelector('button[type="submit"]');
@@ -909,7 +938,7 @@ budgetForm.addEventListener('submit', e => {
   const invalid = !name.value.trim() ? [name, 'Введите название операции.']
     : !amount.value || !Number.isFinite(amountValue) || amountValue <= 0 || !amount.validity.valid ? [amount, 'Введите сумму больше нуля, не более двух знаков после запятой.']
     : !date.value || !date.validity.valid ? [date, 'Укажите дату операции.']
-    : type === 'transfer' && (!accountById(transferFrom.value) || !accountById(transferTo.value) || transferFrom.value === transferTo.value || accountById(transferFrom.value).currency !== accountById(transferTo.value).currency) ? [transferTo, 'Выберите разные свои счета в одной валюте.']
+    : type === 'transfer' && (!accountById(transferFrom.value) || !accountById(transferTo.value) || transferFrom.value === transferTo.value) ? [transferTo, 'Выберите разные свои счета.']
     : type !== 'transfer' && !budgetCategoriesFor(type).includes(transactionCategory.value) ? [transactionCategory, 'Выберите категорию операции.']
     : null;
   if (invalid) {
@@ -921,6 +950,8 @@ budgetForm.addEventListener('submit', e => {
   const recordedAt = new Date();
   const isTransfer = type === 'transfer';
   const item = {id:recordId(),createdAt:recordedAt.toISOString(),name:name.value.trim(),amount:amountValue,type,category:isTransfer ? 'Перевод между своими счетами' : transactionCategory.value,currency:$('#transactionCurrency').value,date:date.value,account:isTransfer ? '' : ($('#transactionAccount')?.value||''),fromAccount:isTransfer ? transferFrom.value : '',toAccount:isTransfer ? transferTo.value : '',comment:comment.value.trim()};
+  if(isTransfer)try {Object.assign(item,transferConversion(amountValue,item.fromAccount,item.toAccount,$('#transferRate').value));}
+  catch(error){budgetFeedback.dataset.state='error';budgetFeedback.textContent=error.message;return;}
   state.budget.transactions.push(item);
   try {
     save();
@@ -934,6 +965,7 @@ budgetForm.addEventListener('submit', e => {
   amount.value = '';
   comment.value = '';
   transferFrom.value = transferTo.value = '';
+  $('#transferRate').value='';
   amount.dispatchEvent(new Event('input', {bubbles:true}));
   renderBudget();
   budgetFeedback.dataset.state = 'success';
@@ -1367,6 +1399,11 @@ renderBudget = () => {
       accountNote.textContent = account.label;
       copy.append(accountNote);
     }
+    if(item.type==='transfer' && accountById(item.fromAccount) && accountById(item.toAccount) && accountById(item.fromAccount).currency!==accountById(item.toAccount).currency) {
+      const conversion=document.createElement('small');conversion.className='transaction-conversion';
+      conversion.textContent=Number.isFinite(item.exchangeRate) && Number.isFinite(item.toAmount) ? `1 ${item.currency} = ${item.exchangeRate} ${item.toCurrency} · Зачислено: ${currency(item.toAmount,item.toCurrency)}` : 'Курс не указан · сумма зачисления не рассчитана';
+      copy.append(conversion);
+    }
     const edit = document.createElement('button');
     edit.type = 'button';
     edit.className = 'transaction-edit-action';
@@ -1375,6 +1412,15 @@ renderBudget = () => {
     editor.className = 'transaction-editor';
     const categories = categoryListFor(item);
     editor.innerHTML = `<label>Тип<select name="type" aria-label="Тип операции"><option value="expense"${item.type === 'expense' ? ' selected' : ''}>Расход</option><option value="income"${item.type === 'income' ? ' selected' : ''}>Доход</option><option value="planned"${item.type === 'planned' ? ' selected' : ''}>Запланированная трата</option>${item.type === 'transfer' ? '<option value="transfer" selected>Перевод</option>' : ''}</select></label><label>Валюта<select name="currency" aria-label="Валюта операции">${['RSD','EUR','RUB','AMD'].map(code => `<option${(item.currency || 'RUB') === code ? ' selected' : ''}>${code}</option>`).join('')}</select></label><label class="transaction-edit-wide">Название<input name="name" aria-label="Название операции" required value="${escapeOption(item.name)}"></label><label>Сумма<input name="amount" aria-label="Сумма операции" type="number" min="0" step="0.01" required value="${item.amount}"></label><label>Дата<input name="date" aria-label="Дата операции" type="date" required value="${item.date || ''}"></label><label class="transaction-edit-wide">Счёт<select name="account" aria-label="Счёт операции"><option value="">Без счёта</option>${budgetAccounts.map(account => `<option value="${account.id}"${item.account === account.id ? ' selected' : ''}>${account.label}</option>`).join('')}</select></label><label class="transaction-edit-wide">Категория<select name="category" aria-label="Категория операции"></select></label><label class="transaction-edit-wide">Комментарий<textarea name="comment" aria-label="Комментарий к операции" rows="2" placeholder="Необязательно">${escapeOption(item.comment || '')}</textarea></label><button type="submit">Сохранить изменения</button><button type="button" class="transaction-edit-cancel">Отмена</button>`;
+    const from=accountById(item.fromAccount),to=accountById(item.toAccount);
+    let rateEditor=null;
+    if(item.type==='transfer' && from && to && from.currency!==to.currency) {
+      const label=document.createElement('label');label.className='transaction-edit-wide';
+      label.textContent=`Курс — необязательно (${to.currency} за 1 ${from.currency})`;
+      rateEditor=document.createElement('input');rateEditor.name='exchangeRate';rateEditor.inputMode='decimal';rateEditor.value=item.exchangeRate ?? '';
+      rateEditor.addEventListener('input',()=>rateEditor.setCustomValidity(''));
+      label.append(rateEditor);editor.querySelector('[name="comment"]').closest('label').before(label);
+    }
     const typeField = editor.querySelector('[name="type"]');
     const categoryField = editor.querySelector('[name="category"]');
     const setCategories = (selectedCategory = item.category) => {
@@ -1382,7 +1428,13 @@ renderBudget = () => {
       categoryField.innerHTML = available.map(category => `<option${category === selectedCategory ? ' selected' : ''}>${escapeOption(category)}</option>`).join('');
     };
     setCategories();
-    typeField.onchange = () => setCategories();
+    const updateTransferEditor=()=>{
+      setCategories();
+      editor.elements.currency.disabled=typeField.value==='transfer' && Boolean(from);
+      if(from && typeField.value==='transfer')editor.elements.currency.value=from.currency;
+      if(rateEditor){rateEditor.disabled=typeField.value!=='transfer';rateEditor.closest('label').hidden=rateEditor.disabled;rateEditor.setCustomValidity('');}
+    };
+    typeField.onchange=updateTransferEditor;updateTransferEditor();
     edit.onclick = () => row.classList.toggle('is-editing-transaction');
     editor.querySelector('.transaction-edit-cancel').onclick = () => row.classList.remove('is-editing-transaction');
     editor.onsubmit = event => {
@@ -1391,16 +1443,21 @@ renderBudget = () => {
       const amount = Number(data.get('amount'));
       const name = String(data.get('name') || '').trim();
       if (!name || !Number.isFinite(amount) || amount <= 0 || !editor.checkValidity()) { editor.reportValidity(); return; }
+      let conversion={};
+      if(typeField.value==='transfer' && from && to)try{conversion=transferConversion(amount,from.id,to.id,rateEditor?.value || '');}
+      catch(error){rateEditor?.setCustomValidity(error.message);editor.reportValidity();return;}
       const previous = {...item};
+      delete item.exchangeRate;delete item.toAmount;delete item.toCurrency;
+      Object.assign(item,conversion);
       item.name = name;
       item.amount = amount;
       item.type = String(data.get('type'));
-      item.currency = String(data.get('currency'));
+      item.currency = typeField.value==='transfer' && from ? from.currency : String(data.get('currency'));
       item.date = String(data.get('date'));
       item.account = String(data.get('account'));
       item.category = String(data.get('category'));
       item.comment = String(data.get('comment') || '').trim();
-      try { save(); } catch { Object.assign(item,previous);setSyncStatus('Не удалось сохранить изменения · данные остались в форме');return; }
+      try { save(); } catch { Object.keys(item).forEach(key=>delete item[key]);Object.assign(item,previous);setSyncStatus('Не удалось сохранить изменения · данные остались в форме');return; }
       renderBudget();
     };
     copy.append(edit, editor);
@@ -2071,7 +2128,7 @@ function mountBudgetConverter() {
   const refresh = () => {
     const value = Number(amount.value);
     const rateValue = Number(rate.value);
-    const foreignCurrency = currencySelect.value !== 'RSD';
+    const foreignCurrency = currencySelect.value !== 'RSD' && transactionType.value !== 'transfer';
     const hasAmount = Number.isFinite(value) && value > 0;
     const canConvert = foreignCurrency && hasAmount && Number.isFinite(rateValue) && rateValue > 0;
     converter.hidden = !foreignCurrency;
@@ -2083,11 +2140,12 @@ function mountBudgetConverter() {
   };
   amount.addEventListener('input', refresh);
   currencySelect.addEventListener('change', refresh);
+  transactionType.addEventListener('change', refresh);
   rate.addEventListener('input', refresh);
   convert.addEventListener('click', () => {
     const value = Number(amount.value);
     const rateValue = Number(rate.value);
-    if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(rateValue) || rateValue <= 0 || currencySelect.value === 'RSD') return;
+    if (transactionType.value==='transfer' || !Number.isFinite(value) || value <= 0 || !Number.isFinite(rateValue) || rateValue <= 0 || currencySelect.value === 'RSD') return;
     amount.value = String(Math.round(value * rateValue * 100) / 100);
     currencySelect.value = 'RSD';
     refresh();
