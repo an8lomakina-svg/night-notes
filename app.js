@@ -1771,7 +1771,7 @@ function mountBudgetJourney() {
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=55')) budgetStylesheet.href = 'styles.css?v=55&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=57')) budgetStylesheet.href = 'styles.css?v=57&journey=1';
 mountBudgetJourney();
 renderBudget();
 
