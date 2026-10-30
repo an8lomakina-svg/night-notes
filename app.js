@@ -1984,6 +1984,18 @@ function normalizeInspirationArchive() {
   state.inspirationArchive = [...byDate.values()].sort((a,b) => String(b.date).localeCompare(String(a.date)));
   state.inspirationArchive.forEach(item => Object.assign(item, { date:item.date, ...inspirationCatalog[dailyInspirationIndex(item.date)] }));
 }
+function reconcileArchivedInspiration() {
+  let changed = false;
+  (state.archive || []).forEach(entry => {
+    if (entry.source !== 'daily-inspiration' || !entry.payload?.date) return;
+    const card = inspirationCatalog[dailyInspirationIndex(entry.payload.date)];
+    const payload = { date:entry.payload.date, quote:card.quote, author:card.author, title:card.title, artist:card.artist, info:card.info, source:card.source, image:card.image };
+    const before = JSON.stringify({ type:entry.type, text:entry.text, payload:entry.payload });
+    Object.assign(entry, { type:'ВДОХНОВЕНИЕ', text:`${card.title} · ${card.artist}`, payload });
+    changed = changed || before !== JSON.stringify({ type:entry.type, text:entry.text, payload:entry.payload });
+  });
+  return changed;
+}
 function clearPreStartInspirationArchive(startedOn) {
   const before = state.archive?.length || 0;
   state.archive = (state.archive || []).filter(entry => entry.source !== 'daily-inspiration' || entry.payload?.date >= startedOn);
@@ -2036,13 +2048,14 @@ function renderDailyInspiration() {
   state.dailyInspirationArchiveStart ??= key;
   // Discard the one-off historical entry created before the archive start date; nothing is backfilled.
   const removedBeforeStart = clearPreStartInspirationArchive(state.dailyInspirationArchiveStart);
+  const reconciledArchive = reconcileArchivedInspiration();
   // Yesterday's complete card is preserved in the shared, main archive once a new day starts.
   const archiveChanged = archivePastInspiration(key);
-  if ((changed || archiveStartChanged || removedBeforeStart || archiveChanged) && !startupStorageError && !damagedNotebook) {
+  if ((changed || archiveStartChanged || removedBeforeStart || reconciledArchive || archiveChanged) && !startupStorageError && !damagedNotebook) {
     // Generated artwork must not turn a read into an upload or overwrite another notebook's pending marker.
-    if (archiveChanged || removedBeforeStart) { try { save(); } catch { setSyncStatus('Не удалось сохранить архив · попробуй ещё раз'); } }
+    if (archiveChanged || removedBeforeStart || reconciledArchive) { try { save(); } catch { setSyncStatus('Не удалось сохранить архив · попробуй ещё раз'); } }
   }
-  if (archiveChanged || removedBeforeStart) renderArchive();
+  if (archiveChanged || removedBeforeStart || reconciledArchive) renderArchive();
   $('#inspirationDate').textContent = niceDate(new Date()).toUpperCase();
   const showArtwork = (node, fallback) => {
     node.onerror = () => { node.onerror = null; node.src = fallback; };
