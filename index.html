@@ -232,6 +232,12 @@
 #recoveryDialog button:not(.text-button) { width:max-content; max-width:100%; min-height:42px; padding:8px 12px; border:1px solid #c78a59; border-radius:8px; background:#f5e5cf; color:#493125; font:inherit; }
 #recoveryDialog .sync-dialog-actions { display:flex; justify-content:flex-end; }
 @media(max-width:520px) { #recoveryDialog .recovery-dialog-card { padding:20px; } #recoveryDialog button:not(.text-button) { width:100%; } }
+</style><style id="ios-home-screen-recovery">
+#syncDialog .sync-ios-hint { margin:0; color:#765a46; font-size:11px; line-height:1.45; }
+#recoveryDialog #standaloneRecoveryHint { padding:14px; border:1px solid #c78a59; background:#fff3e0; color:#493125; }
+#recoveryDialog #standaloneRecoveryHint[hidden] { display:none; }
+#recoveryDialog #standaloneRecoveryHint strong { display:block; font-size:15px; }
+#recoveryDialog #standaloneRecoveryHint p { margin:6px 0 0; font-size:13px; line-height:1.45; }
 </style></head>
   <body>
     <div class="grain"></div>
@@ -362,7 +368,7 @@
           <p>Скопируй ссылку и открой её в браузере другого устройства.</p>
           <button id="createShareLink" type="button" class="outline-button sync-share-button">Скопировать мою ссылку</button>
           <input id="shareLink" class="share-link" type="url" readonly hidden aria-label="Приватная ссылка на блокнот" />
-          <small>Ссылка даёт доступ к записям — не отправляй её посторонним.</small>
+          <small>Ссылка даёт доступ к записям — не отправляй её посторонним.</small><p class="sync-ios-hint"><strong>Для iPhone:</strong> открой эту ссылку в Safari, затем выбери «Поделиться» → «На экран Домой».</p>
         </section>
         <button id="openRecoveryDialog" type="button" class="text-button sync-recovery-link">Восстановление данных</button>
         <div class="sync-dialog-actions"><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
@@ -372,7 +378,7 @@
       <form method="dialog" class="sync-dialog-card recovery-dialog-card">
         <p class="eyebrow">ВОССТАНОВЛЕНИЕ</p>
         <h2 id="recoveryTitle">Данные и резервные копии</h2>
-        <p class="sync-intro">Используй эти действия, только если нужно вернуть прошлую копию или подключить другой блокнот.</p>
+        <p class="sync-intro">Используй эти действия, только если нужно вернуть прошлую копию или подключить другой блокнот.</p><aside id="standaloneRecoveryHint" hidden role="alert"><strong>Записи не удалены.</strong><p>Ярлык iPhone открыл пустой экземпляр. Вставь приватную ссылку на свой блокнот ниже, затем создай ярлык заново из Safari именно с этой ссылки.</p></aside>
         <section class="recovery-section">
           <h3>Резервные копии</h3>
           <div class="sync-backup-actions">
@@ -449,7 +455,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="sync-core.js?v=2"></script>
     <script src="calendar-import.js?v=2"></script>
-    <script src="app.js?v=126"></script>
+    <script src="app.js?v=127"></script>
     <script id="section-swipe-navigation">
 (() => {
   const menu = document.querySelector('.sidebar nav');
