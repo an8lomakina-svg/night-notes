@@ -112,6 +112,11 @@ let cloudPushPromise = null, sharedPushPromise = null;
 let lastSavedState = NotebookSync.clone(state);
 const SYNC_BASE_KEY='night-notes-sync-base-v2';
 const SYNC_CONFLICT_KEY='night-notes-sync-conflict-v1';
+// Set only when an existing private notebook is deliberately moved into an email account.
+// This lets the one-time email callback prefer the account without losing the local copy.
+const EMAIL_MIGRATION_KEY='night-notes-email-migration-v1';
+const emailMigrationPending=()=>localStorage.getItem(EMAIL_MIGRATION_KEY)==='1';
+const finishEmailMigration=()=>localStorage.removeItem(EMAIL_MIGRATION_KEY);
 const syncTarget = () => cloudUser ? 'user:' + cloudUser.id
   : sharedSync ? 'shared:' + sharedSync.secret
   : new URLSearchParams(location.search).get('sync') ? 'shared:' + new URLSearchParams(location.search).get('sync')
@@ -1536,21 +1541,40 @@ async function initCloudSync() {
   cloudClient=window.supabase.createClient(SYNC_CONFIG.url,SYNC_CONFIG.key);
   try {
     const sharedSecret=sharedSecretFromLocation();
-    const session=sharedSecret ? null : (await cloudClient.auth.getSession()).data.session;
-    // An explicit/shared notebook identity must not be replaced by an unrelated email session.
-    if(sharedSecret) {
+    const migratingToEmail=emailMigrationPending();
+    // The migration flag is set only by an explicit user action. It lets a magic-link
+    // callback turn a shared notebook into an account notebook without dropping its state.
+    const session=(migratingToEmail || !sharedSecret) ? (await cloudClient.auth.getSession()).data.session : null;
+    if(sharedSecret && !migratingToEmail) {
       cloudUser=null;
       setSyncStatus('Подключаю записи…');
       if (await ensureSharedSync()) await hydrateSharedState();
       else setSyncStatus('Открой приватную ссылку, чтобы подключить записи');
     }
-    else {cloudUser=session?.user || null;if(cloudUser)await hydrateCloudState();else setSyncStatus('Записи сохраняются на устройстве · синхронизация не подключена');}
+    else {
+      cloudUser=session?.user || null;
+      if(cloudUser) {
+        const synced=await hydrateCloudState();
+        if(migratingToEmail && synced) {
+          finishEmailMigration();
+          setSyncStatus('Записи привязаны к email · теперь они откроются после входа на iPhone',true);
+        }
+      } else setSyncStatus('Записи сохраняются на устройстве · синхронизация не подключена');
+    }
     if(syncSignOut)syncSignOut.hidden=!cloudUser;
     cloudClient.auth.onAuthStateChange((_event,nextSession)=>{
-      if(sharedSecretFromLocation())return;
+      // A private link stays in charge unless the user expressly asked to migrate it.
+      if(sharedSecretFromLocation() && !emailMigrationPending())return;
       const user=nextSession?.user || null,changed=user?.id!==cloudUser?.id;
       cloudUser=user;if(syncSignOut)syncSignOut.hidden=!cloudUser;
-      if(changed && cloudUser)setTimeout(()=>hydrateCloudState(),0);
+      if(changed && cloudUser)setTimeout(async()=>{
+        const synced=await hydrateCloudState();
+        if(emailMigrationPending() && synced) {
+          finishEmailMigration();
+          setSyncStatus('Записи привязаны к email · теперь они откроются после входа на iPhone',true);
+          $('#syncEmailMessage') && ($('#syncEmailMessage').textContent='Готово: этот блокнот привязан к email.');
+        }
+      },0);
       else if(changed)setSyncStatus('Записи сохраняются на устройстве · синхронизация не подключена');
     });
   } catch {setSyncStatus('Синхронизация недоступна · локальная копия сохранена');}
@@ -1590,16 +1614,30 @@ document.addEventListener('visibilitychange', () => {
 
 const requestSyncCode = $('#requestSyncCode');
 requestSyncCode?.addEventListener('click', async () => {
-  const email = syncEmail?.value.trim().toLowerCase();
-  if (!email || !cloudClient) return;
-  requestSyncCode.disabled = true;
-  const { error } = await cloudClient.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}${window.location.pathname}` } });
-  requestSyncCode.disabled = false;
-  if (error) {
-    syncMessage.textContent = `Не удалось отправить ссылку: ${error.message}`;
+  const email = $('#syncEmail')?.value.trim().toLowerCase();
+  const message = $('#syncEmailMessage');
+  if (!email || !cloudClient) {
+    if(message) message.textContent='Введи email и попробуй ещё раз.';
     return;
   }
-  syncMessage.textContent = 'Проверь почту и подтверди вход. После этого этот браузер будет загружать и сохранять блокнот автоматически.';
+  const isSharedNotebook=Boolean(sharedSecretFromLocation() && hasNotebookEntries(state));
+  requestSyncCode.disabled = true;
+  try {
+    // First flush the encrypted notebook; then the confirmed email login may copy it
+    // to the account store. Nothing is removed from the private-link store.
+    if(isSharedNotebook && sharedSync && hasPendingSync('shared:' + sharedSync.secret) && !await pushSharedState()) throw new Error('save_failed');
+    if(isSharedNotebook) localStorage.setItem(EMAIL_MIGRATION_KEY,'1');
+    const { error } = await cloudClient.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}${window.location.pathname}` } });
+    if (error) throw error;
+    if(message) message.textContent=isSharedNotebook
+      ? 'Проверь почту. После подтверждения копия этого блокнота будет привязана к email.'
+      : 'Проверь почту. После подтверждения здесь откроются записи, привязанные к этому email.';
+  } catch (error) {
+    if(isSharedNotebook) finishEmailMigration();
+    if(message) message.textContent=error?.message === 'save_failed'
+      ? 'Не удалось сначала сохранить текущие записи. Проверь интернет и повтори.'
+      : `Не удалось отправить письмо: ${error?.message || 'попробуй ещё раз'}`;
+  } finally { requestSyncCode.disabled = false; }
 });
 
 $('#syncAccount').onclick = () => {
