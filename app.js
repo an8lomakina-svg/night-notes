@@ -999,6 +999,9 @@ function loadReceiptOcr() {
     script.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error('ocr_unavailable'));
     script.onerror = () => reject(new Error('ocr_load_failed'));
     document.head.append(script);
+  }).catch(error => {
+    window.receiptOcrLoading = null;
+    throw error;
   });
   return window.receiptOcrLoading;
 }
@@ -1125,7 +1128,11 @@ async function startReceiptImport(file) {
   receiptImportInput.value = '';
   receiptImportReview.hidden = false;
   receiptImportRows.innerHTML = '';
-  if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
+  receiptImportDraft = [];
+  receiptImportSave.disabled = true;
+  // Files selected through iOS Files can have an empty MIME type.
+  const isImage = file.type.startsWith('image/') || (!file.type && /\.(png|jpe?g|webp)$/i.test(file.name));
+  if (!isImage || file.size > 8 * 1024 * 1024) {
     receiptImportStatus.textContent = 'Выбери скриншот в формате изображения до 8 МБ.';
     return;
   }
