@@ -63,6 +63,11 @@
         }
         return out;
       }
+      // Generated archive start dates differ on a new installation. Keep the
+      // earliest date deterministically; this is not a conflicting user edit.
+      if(path.length===1 && path[0]==='dailyInspirationArchiveStart' &&
+          typeof l==='string' && typeof r==='string' &&
+          /^\d{4}-\d{2}-\d{2}$/.test(l) && /^\d{4}-\d{2}-\d{2}$/.test(r)) return l<r ? l : r;
       if (equal(l,b)) return clone(r);
       if (equal(r,b)) return clone(l);
       if (l === '' || l === null) return clone(r);

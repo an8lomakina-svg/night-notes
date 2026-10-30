@@ -20,6 +20,14 @@ test('Delete vs edit is surfaced',()=>assert(S.merge(a,removed,remote).conflicts
 test('Remote edit can be kept over local delete',()=>assert.equal(S.merge(a,removed,remote,'remote').state.budget.transactions[0].name,'remote'));
 test('Local delete can be kept over remote edit',()=>assert.equal(S.merge(a,removed,remote,'local').state.budget.transactions.length,0));
 test('Different fields of same record merge',()=>{const l=S.clone(a),r=S.clone(a);l.budget.transactions[0].name='L';r.budget.transactions[0].amount=50;const m=S.merge(a,l,r);assert.equal(m.conflicts.length,0);assert.equal(m.state.budget.transactions[0].amount,50);assert.equal(m.state.budget.transactions[0].name,'L')});
+test('Generated archive dates cannot block records from another device',()=>{
+ const l={...ab,dailyInspirationArchiveStart:'2026-10-30'},r={...ac,dailyInspirationArchiveStart:'2026-10-20'};
+ for(const [left,right] of [[l,r],[r,l]]) {
+  const merged=S.merge(undefined,left,right);assert.deepEqual(merged.conflicts,[]);
+  assert.equal(merged.state.dailyInspirationArchiveStart,'2026-10-20');
+  assert.deepEqual(merged.state.budget.transactions.map(t=>t.id).sort(),['a','b','c']);
+ }
+});
 test('Malformed backup rejected',()=>assert(!S.valid({budget:{transactions:[{name:'bad',amount:'x'}]},events:{}})));
 const event=dt=>'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:t\nDTSTART'+dt+'\nSUMMARY:hello\nEND:VEVENT\nEND:VCALENDAR';
 test('UTC crossing midnight converts date too',()=>assert.equal(C.parse(event(':20261029T233000Z'),'Europe/Belgrade').events[0].date,'2026-10-30'));

@@ -5,7 +5,7 @@ const book=ids=>({budget:{transactions:ids.map(id=>({id,name:id,amount:100,type:
 const enc=async state=>{const iv=webcrypto.getRandomValues(new Uint8Array(12)),key=await webcrypto.subtle.importKey('raw',Buffer.from(secret,'base64url'),{name:'AES-GCM'},false,['encrypt']);return {iv:Buffer.from(iv).toString('base64url'),ciphertext:Buffer.from(await webcrypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(state)))).toString('base64url')}};
 const delay=()=>new Promise(r=>setTimeout(r,40));
 async function setup(opts={}){
- let server=await enc(book(opts.remote??['old'])),reads=0,writes=0,gate,release;const remoteCalls=[];
+ let server=await enc({...book(opts.remote??['old']),...(opts.remoteState || {})}),reads=0,writes=0,gate,release;const remoteCalls=[];
  if(opts.hold)gate=new Promise(r=>release=r);
  const client={auth:{getSession:async()=>({data:{session:opts.session?{user:{id:'test-user'}}:null}}),onAuthStateChange:fn=>{if(opts.authEvent)setTimeout(()=>fn('INITIAL_SESSION',null),0);}},rpc:async(name,args)=>{remoteCalls.push(name);if(name==='get_shared_notebook'){reads++;if(gate)await gate;return opts.failRead?{error:new Error('offline')}:{data:server};}writes++;if(opts.failWrite)return {error:new Error('offline')};server=args.p_payload;return {};},from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{payload:book([])}})})}),upsert:async()=>({})})};
  const h=await boot({client,query:opts.cookie?'':'?sync='+secret,cookie:opts.cookie?'night_notes_install_v1='+secret:null,storage:opts.storage||{},standalone:true});
@@ -14,6 +14,12 @@ async function setup(opts={}){
 async function test(name,fn,opts){const h=await setup(opts);try{await fn(h);assert.equal(h.errors.length,0,h.errors.join('\n'));results.push({area:'sync',name,status:'PASS'});}catch(e){results.push({area:'sync',name,status:'FAIL',detail:e.message});}finally{h.release?.();await delay();h.close();}}
 (async()=>{
 await test('Fresh installation downloads existing data without upload',async h=>{await delay();assert.equal(h.w.audit.state.budget.transactions[0].id,'old');assert.equal(h.counts().writes,0);});
+await test('Fresh browser loads renamed default shopping list without a false conflict',async h=>{
+ await delay();assert.equal(h.w.audit.state.budget.transactions[0].id,'old');
+ assert.equal(h.w.audit.state.shoppingLists[0].name,'QA renamed list');
+ assert.equal(h.w.localStorage.getItem('night-notes-sync-conflict-v1'),null);
+ assert.equal(h.counts().writes,0);assert(h.$('#syncAccount').classList.contains('is-synced'));
+},{remoteState:{dailyInspirationArchiveStart:'2001-01-01',shoppingLists:[{id:'main',name:'QA renamed list',items:[]}]}});
 await test('Home-screen cookie reconnects without URL or localStorage',async h=>{await delay();assert.equal(h.w.audit.state.budget.transactions[0].id,'old');assert.equal(h.$('#installRecovery').hidden,true);},{cookie:true});
 await test('Pending offline save survives reload and uploads',async h=>{await delay();assert.deepEqual(await h.serverIDs(),['old','new']);assert.equal(h.w.localStorage.getItem('night-notes-pending-sync-v1'),null);},{storage:{'night-notes-v1':JSON.stringify(book(['old','new'])),'night-notes-pending-sync-v1':JSON.stringify({target,revision:1})}});
 await test('Failed upload keeps durable pending marker and local data',async h=>{await delay();assert(h.w.localStorage.getItem('night-notes-pending-sync-v1'));assert.equal(h.w.audit.state.budget.transactions.length,2);},{failWrite:true,storage:{'night-notes-v1':JSON.stringify(book(['old','new'])),'night-notes-pending-sync-v1':JSON.stringify({target,revision:1})}});

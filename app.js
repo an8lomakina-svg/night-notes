@@ -309,7 +309,11 @@ async function syncNotebook(connection,upload) {
       const local=NotebookSync.clone(state),base=readSyncBase(target);
       const parallelBranch=base?._sync?.commit && remote?._sync?.commit && base._sync.commit!==remote._sync.commit && !(remote._sync.ancestors || []).includes(base._sync.commit);
       const mergeBase=parallelBranch ? undefined : base;
-      const result=NotebookSync.merge(mergeBase,local,remote || {});
+      // A fresh browser has UI defaults, not a second edited notebook. Hydrate
+      // the existing copy directly so differing defaults cannot block its load.
+      // Pending edits and prior sync history must still use conflict-aware merge.
+      const firstDownload=remote && !base && !hasPendingSync(target) && !hasNotebookEntries(local);
+      const result=firstDownload ? {state:NotebookSync.clone(remote),conflicts:[]} : NotebookSync.merge(mergeBase,local,remote || {});
       if(result.conflicts.length) {
         localStorage.setItem(SYNC_CONFLICT_KEY,JSON.stringify({target,base:mergeBase,baseline:base,local,remote,conflicts:result.conflicts}));
         showSyncConflict();setSyncStatus('Есть разные версии записей · выбери вариант в синхронизации');return false;
@@ -326,6 +330,16 @@ async function syncNotebook(connection,upload) {
       normalizeCloudState();lastSavedState=NotebookSync.clone(state);renderCloudState();
       rememberSyncTarget(target);
       localStorage.setItem(SYNC_BASE_KEY,JSON.stringify({target,state:remote || {}}));
+      if(firstDownload) {
+        // Clear only a previous failed first-download conflict. Genuine local
+        // edits and conflicts for other identities remain recoverable.
+        try {
+          const previous=JSON.parse(localStorage.getItem(SYNC_CONFLICT_KEY) || 'null');
+          if(previous?.target===target && !hasNotebookEntries(previous.local)) {
+            localStorage.removeItem(SYNC_CONFLICT_KEY);showSyncConflict();
+          }
+        } catch {}
+      }
       if(!needsUpload){setSyncStatus('Изменения синхронизированы',true);return true;}
       const revision=localRevision;
       const outgoing=NotebookSync.clone(state);
