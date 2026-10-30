@@ -1384,7 +1384,7 @@ try {
   }
 } catch {}
 function renderBudgetEuroOverview() {
-  const total = type => state.budget.transactions
+  const total = type => budgetTransactionsForSelectedPeriod()
     .filter(item => item.type === type)
     .reduce((sum, item) => sum + item.amount / (budgetEurRates[item.currency || 'RUB'] || 1), 0);
   Object.assign(generalChartRates,budgetEurRates);
