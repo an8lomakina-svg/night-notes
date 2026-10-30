@@ -218,6 +218,20 @@
 #syncDialog .sync-conflict { margin-top:12px; padding:14px; border:1px solid rgba(175,74,51,.35); background:#fff7ed; }
 #syncDialog .sync-conflict[hidden] { display:none; }
 @media(max-width:520px) { #syncDialog .sync-backup-actions,#syncDialog .existing-notebook div { display:grid; grid-template-columns:1fr; } #syncDialog .sync-email-login { grid-template-columns:1fr; } }
+</style><style id="sync-recovery-separation">
+#syncDialog .sync-recovery-link { display:block; margin:14px auto 0; color:#765a46; }
+#recoveryDialog { width:min(510px,calc(100% - 32px)); max-height:calc(100dvh - 32px); overflow:auto; border:1px solid var(--line); background:#fffaf2; color:#493125; box-shadow:var(--shadow); }
+#recoveryDialog::backdrop { background:rgba(48,35,25,.36); }
+#recoveryDialog .recovery-dialog-card { display:grid; gap:14px; padding:26px; }
+#recoveryDialog h2,#recoveryDialog h3 { margin:0; color:#493125; font-family:"Playfair Display",serif; }
+#recoveryDialog h2 { font-size:30px; }
+#recoveryDialog h3 { font-size:20px; }
+#recoveryDialog .recovery-section { display:grid; gap:10px; padding:16px; border:1px solid rgba(91,61,38,.16); background:rgba(255,253,248,.66); }
+#recoveryDialog .recovery-section label { font-size:13px; font-weight:600; }
+#recoveryDialog input { width:100%; min-height:44px; padding:9px 10px; border:1px solid var(--line); background:#fffdf8; color:#493125; font-size:16px; }
+#recoveryDialog button:not(.text-button) { width:max-content; max-width:100%; min-height:42px; padding:8px 12px; border:1px solid #c78a59; border-radius:8px; background:#f5e5cf; color:#493125; font:inherit; }
+#recoveryDialog .sync-dialog-actions { display:flex; justify-content:flex-end; }
+@media(max-width:520px) { #recoveryDialog .recovery-dialog-card { padding:20px; } #recoveryDialog button:not(.text-button) { width:100%; } }
 </style></head>
   <body>
     <div class="grain"></div>
@@ -343,47 +357,41 @@
         <h2>Твой блокнот сохранён</h2>
         <p id="notebookSaveStatus" role="status" aria-live="polite"></p>
         <p id="syncMessage" class="sync-intro">Открой блокнот на другом устройстве по приватной ссылке.</p>
-
         <section class="sync-main-action" aria-labelledby="syncShareTitle">
           <h3 id="syncShareTitle">Открыть на другом устройстве</h3>
-          <p>Нажми кнопку, затем вставь скопированную ссылку в браузере другого устройства.</p>
+          <p>Скопируй ссылку и открой её в браузере другого устройства.</p>
           <button id="createShareLink" type="button" class="outline-button sync-share-button">Скопировать мою ссылку</button>
           <input id="shareLink" class="share-link" type="url" readonly hidden aria-label="Приватная ссылка на блокнот" />
           <small>Ссылка даёт доступ к записям — не отправляй её посторонним.</small>
         </section>
-
-        <details class="sync-optional">
-          <summary>Войти по email</summary>
-          <div class="sync-optional-body">
-            <p>Подтверди вход из письма один раз в новом браузере — это альтернатива приватной ссылке.</p>
-            <div class="sync-email-login">
-              <input id="syncEmail" type="email" autocomplete="email" placeholder="твой email" aria-label="Email для синхронизации" />
-              <button id="requestSyncCode" type="button" class="outline-button">Продолжить по email</button>
-            </div>
-          </div>
-        </details>
-
-        <details class="sync-optional">
-          <summary>Резервные копии и подключение</summary>
-          <div class="sync-optional-body">
-            <div class="sync-backup-actions">
-              <button id="downloadPreviousCopy" type="button">Скачать предыдущую копию</button>
-              <button id="importData" type="button">Загрузить копию</button>
-              <input id="dataFileInput" type="file" accept=".json,application/json" hidden />
-            </div>
-            <p id="backupMessage" role="status"></p>
-            <div class="existing-notebook">
-              <label for="existingNotebookLink">Есть ссылка на прежний блокнот?</label>
-              <input id="existingNotebookLink" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/?sync=…" />
-              <div><button type="button" id="connectExistingNotebook">Подключить этот блокнот</button><button type="button" id="backupBeforeConnect">Скачать копию перед подключением</button></div>
-              <p id="existingNotebookMessage" role="status" aria-live="polite"></p>
-            </div>
-          </div>
-        </details>
-
-        <div id="syncConflict" class="sync-conflict" hidden><p>Одна запись изменена по-разному. Обе версии сохранены. Выбери, какие изменения оставить при объединении.</p><button id="downloadSyncConflict" type="button">Скачать обе версии</button><button id="resolveSyncLocal" type="button">Изменения этого устройства</button><button id="resolveSyncRemote" type="button">Изменения из облака</button></div>
-        <p class="sync-privacy-note">Одна и та же приватная ссылка открывает один и тот же блокнот в любом браузере.</p>
+        <button id="openRecoveryDialog" type="button" class="text-button sync-recovery-link">Восстановление данных</button>
         <div class="sync-dialog-actions"><button id="syncSignOut" type="button" class="text-button" hidden>Выйти</button><button type="submit" class="text-button">Закрыть</button></div>
+      </form>
+    </dialog>
+    <dialog id="recoveryDialog" class="sync-dialog" aria-labelledby="recoveryTitle">
+      <form method="dialog" class="sync-dialog-card recovery-dialog-card">
+        <p class="eyebrow">ВОССТАНОВЛЕНИЕ</p>
+        <h2 id="recoveryTitle">Данные и резервные копии</h2>
+        <p class="sync-intro">Используй эти действия, только если нужно вернуть прошлую копию или подключить другой блокнот.</p>
+        <section class="recovery-section">
+          <h3>Резервные копии</h3>
+          <div class="sync-backup-actions">
+            <button id="downloadPreviousCopy" type="button">Скачать предыдущую копию</button>
+            <button id="importData" type="button">Загрузить копию</button>
+            <input id="dataFileInput" type="file" accept=".json,application/json" hidden />
+          </div>
+          <p id="backupMessage" role="status"></p>
+        </section>
+        <section class="recovery-section">
+          <h3>Подключить другой блокнот</h3>
+          <label for="existingNotebookLink">Вставь его приватную ссылку</label>
+          <input id="existingNotebookLink" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/?sync=…" />
+          <button type="button" id="connectExistingNotebook">Подключить этот блокнот</button>
+          <button type="button" id="backupBeforeConnect">Скачать копию перед подключением</button>
+          <p id="existingNotebookMessage" role="status" aria-live="polite"></p>
+        </section>
+        <div id="syncConflict" class="sync-conflict" hidden><p>Одна запись изменена по-разному. Обе версии сохранены. Выбери, какие изменения оставить при объединении.</p><button id="downloadSyncConflict" type="button">Скачать обе версии</button><button id="resolveSyncLocal" type="button">Изменения этого устройства</button><button id="resolveSyncRemote" type="button">Изменения из облака</button></div>
+        <div class="sync-dialog-actions"><button type="submit" class="text-button">Закрыть</button></div>
       </form>
     </dialog>
     <dialog id="budgetCategoryDialog" aria-labelledby="budgetCategoryTitle">
