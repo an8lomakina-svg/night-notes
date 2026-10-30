@@ -1658,9 +1658,12 @@ function showInstallRecovery() {
   // Keep recovery visible on every blank local notebook, not only in installed apps.
   banner.hidden = !!cloudUser || !!sharedSecretFromLocation() || hasNotebookEntries(state);
 }
+const recoveryDialog = $('#recoveryDialog');
+$('#openRecoveryDialog')?.addEventListener('click', () => recoveryDialog?.showModal());
 $('#openInstallRecovery')?.addEventListener('click', () => {
-  $('#syncAccount').click();
-  $('#existingNotebookLink').focus({preventScroll:true});
+  syncDialog?.close();
+  recoveryDialog?.showModal();
+  $('#existingNotebookLink')?.focus({preventScroll:true});
 });
 $('#connectExistingNotebook')?.addEventListener('click', async () => {
   const button = $('#connectExistingNotebook'), message = $('#existingNotebookMessage');
