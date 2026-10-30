@@ -1,0 +1,10 @@
+const {boot}=require('./harness.cjs'),assert=require('node:assert/strict');
+(async()=>{const h=await boot();try{
+const tx=h.w.audit.state.budget.transactions;tx.push(...[{date:'2026-10-01',amount:10,category:'Такси'},{date:'2026-10-31',amount:20,category:'Продукты'},{date:'2026-09-30',amount:99,category:'Дом и аренда'},{date:'',amount:100,category:'Прочее'}].map((x,i)=>({...x,id:'period-'+i,name:'Test '+i,currency:'RSD',type:'expense'})));
+h.set('#chartPeriod','custom');h.set('#chartPeriodFrom','2026-10-01');h.event(h.$('#chartPeriodFrom'),'change');h.set('#chartPeriodTo','2026-10-31');h.event(h.$('#chartPeriodTo'),'change');
+assert.equal(h.$('#budgetPeriod').value,'custom');assert.equal(h.$('#budgetPeriodFrom').value,'2026-10-01');assert.equal(h.w.budgetTransactionsForSelectedPeriod().length,2);assert.match(h.$('#budgetChart').textContent,/30/);assert.equal(h.w.document.querySelectorAll('#chartLegend > div').length,2);assert.equal(h.$('#chartLegend > div').dataset.category,'Такси');
+h.set('#budgetPeriod','today');assert.equal(h.$('#chartPeriod').value,'today');assert(h.$('#chartCustomRange').hidden);assert.equal(h.$('.chart-wrap').hidden,h.w.budgetTransactionsForSelectedPeriod().length===0);
+h.set('#chartPeriod','this-week');const p=h.w.selectedBudgetPeriod();assert.equal(new Date(p.from+'T12:00:00').getDay(),1);
+h.set('#chartPeriod','custom');h.set('#chartPeriodFrom','2026-11-01');h.event(h.$('#chartPeriodFrom'),'change');h.set('#chartPeriodTo','2026-10-01');h.event(h.$('#chartPeriodTo'),'change');assert.equal(h.w.budgetTransactionsForSelectedPeriod().length,0);assert.match(h.$('#chartPeriodCaption').textContent,/не позже/);assert(h.$('.chart-wrap').hidden);assert(!h.$('.budget-chart-empty').hidden);
+h.set('#chartPeriod','all');assert.equal(h.w.budgetTransactionsForSelectedPeriod().length,4);assert(!h.$('.chart-wrap').hidden);assert.equal(tx.length,4);assert.deepEqual(h.errors,[]);console.log('PASS chart periods, inclusive dates, synchronized controls, legend categories, empty and reversed ranges, unchanged records');
+}finally{h.close()}})().catch(e=>{console.error(e);process.exitCode=1});

@@ -749,6 +749,8 @@ try { budgetDateOrder = localStorage.getItem('night-notes-budget-date-order') ==
 const isoDate = date => date.toISOString().slice(0, 10);
 const budgetPeriodLabel = ({ key, from, to }) => {
   if (key === 'all') return 'За всё время';
+  if (key === 'today') return 'Сегодня';
+  if (key === 'this-week') return 'Эта неделя · с понедельника';
   if (key === 'current-month' || key === 'previous-month') return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date(from + 'T12:00:00'));
   if (key === 'last-90') return 'Последние 90 дней';
   return from && to ? `${from.split('-').reverse().join('.')} — ${to.split('-').reverse().join('.')}` : 'Свой период';
@@ -758,6 +760,8 @@ function selectedBudgetPeriod() {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   if (key === 'all') return { key, from: '', to: '' };
+  if (key === 'today') return {key, from: dateKey(today), to: dateKey(today)};
+  if (key === 'this-week') {const start=new Date(today);start.setDate(today.getDate()-(today.getDay()+6)%7);return {key,from:dateKey(start),to:dateKey(today)};}
   if (key === 'current-month') return { key, from: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`, to: isoDate(today) };
   if (key === 'previous-month') {
     const start = new Date(today.getFullYear(), today.getMonth() - 1, 1, 12);
@@ -774,6 +778,7 @@ function selectedBudgetPeriod() {
 function budgetTransactionsForSelectedPeriod(entries = state.budget.transactions) {
   const period = selectedBudgetPeriod();
   if (period.key === 'all') return entries;
+  if(period.from && period.to && period.from>period.to)return [];
   return entries.filter(item => {
     const date = item.date || '';
     return Boolean(date) && (!period.from || date >= period.from) && (!period.to || date <= period.to);
@@ -785,6 +790,11 @@ function refreshBudgetPeriodControls() {
   if (custom) custom.hidden = period.key !== 'custom';
   const caption = $('#budgetPeriodCaption');
   if (caption) caption.textContent = `${budgetPeriodLabel(period)} · без планов и переводов`;
+  if($('#chartPeriod')) $('#chartPeriod').value=period.key;
+  if($('#chartCustomRange')) $('#chartCustomRange').hidden=period.key!=='custom';
+  for(const suffix of ['From','To']) if($('#chartPeriod'+suffix)) $('#chartPeriod'+suffix).value=$('#budgetPeriod'+suffix).value;
+  if($('#chartPeriodCaption')) $('#chartPeriodCaption').textContent=period.from && period.to && period.from>period.to ? 'Начало периода должно быть не позже конца.' : `${budgetPeriodLabel(period)} · общий период для итогов, диаграммы и истории`;
+
 }
 const budgetEntriesByDate = (entries = budgetTransactionsForSelectedPeriod()) => [...entries].sort((left, right) => {
   const direction = budgetDateOrder === 'oldest' ? 1 : -1;
@@ -805,6 +815,8 @@ budgetPeriodControl?.addEventListener('change', () => { refreshBudgetPeriodContr
 ['#budgetPeriodFrom', '#budgetPeriodTo'].forEach(selector => $(selector)?.addEventListener('change', () => {
   if (budgetPeriodControl?.value === 'custom') renderBudget();
 }));
+$('#chartPeriod')?.addEventListener('change',event=>{budgetPeriodControl.value=event.target.value;renderBudget();});
+for(const suffix of ['From','To']) $('#chartPeriod'+suffix)?.addEventListener('change',event=>{$('#budgetPeriod'+suffix).value=event.target.value;renderBudget();});
 const expenseCategories=['Доставка еды','Рестораны и кофе','Продукты','Такси','Авиабилеты','Дом и аренда','Стоматолог','Аптека и здоровье','Массаж и уход','Связь и подписки','Мобильный кэш · Катя','Красота','Досуг','Прочее'];
 const incomeCategories=['Зарплата','Займ','Перевод от себя','Возврат','Подарок','Другое'];
 const budgetAccounts = [
@@ -2257,10 +2269,10 @@ function mountBudgetJourney() {
   mobileLayout.addEventListener?.('change', placeChartForViewport);
   const updateChartEmptyState = () => {
     const selectedCurrency = $('#budgetCurrencyFilter')?.value;
-    const hasExpenses = state.budget.transactions.some(item => budgetChartIncludes(item, selectedCurrency));
+    const hasExpenses = budgetTransactionsForSelectedPeriod().some(item => budgetChartIncludes(item, selectedCurrency));
     if (chartWrap) chartWrap.hidden = !hasExpenses;
     chartEmpty.hidden = hasExpenses;
-    chartEmpty.textContent = selectedCurrency === 'ALL' ? 'Добавьте расход в любой валюте — здесь появится общий график в евро.' : 'Добавьте расход в выбранной валюте — здесь появится диаграмма.';
+    chartEmpty.textContent = 'За выбранный период в этой валюте расходов нет.';
   };
 
   const typeSelect = $('#transactionType');
@@ -2298,7 +2310,7 @@ function mountBudgetJourney() {
     const legend = $('#chartLegend');
     const selectedCurrency = $('#budgetCurrencyFilter')?.value;
     const parts = Object.create(null);
-    budgetChartExpenses(state.budget.transactions, selectedCurrency)
+    budgetChartExpenses(budgetTransactionsForSelectedPeriod(), selectedCurrency)
       .forEach(item => { parts[item.category] = (parts[item.category] || 0) + item.amount; });
     const segments = Object.entries(parts).map(([category, amount]) => ({ category, amount }));
     const choose = category => { categoryFilter = categoryFilter === category ? null : category; applyLedgerView(); };
@@ -2331,14 +2343,15 @@ function mountBudgetJourney() {
     };
   };
   const baseBudgetRender = renderBudget;
-  renderBudget = () => { baseBudgetRender(); updateChartEmptyState(); bindCategoryFilter(); applyLedgerView(); };
+  let lastChartPeriod = '';
+  renderBudget = () => { const period=JSON.stringify(selectedBudgetPeriod());if(period!==lastChartPeriod){categoryFilter=null;lastChartPeriod=period;}baseBudgetRender(); updateChartEmptyState(); bindCategoryFilter(); applyLedgerView(); };
   $('#budgetCurrencyFilter').onchange = renderBudget;
   $('#budgetLedgerFilter').addEventListener('change', applyLedgerView);
   $('#budgetLedgerSearch').addEventListener('input', applyLedgerView);
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=57')) budgetStylesheet.href = 'styles.css?v=57&journey=1';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=60')) budgetStylesheet.href = 'styles.css?v=60';
 mountBudgetJourney();
 renderBudget();
 

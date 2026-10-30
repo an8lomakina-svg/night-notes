@@ -905,3 +905,9 @@ button.health-quick-card { font:inherit; }
   .archive-inspiration-grid img { max-height:280px; aspect-ratio:1.35/1; }
 }
 .receipt-import-fields small.receipt-warning { white-space:normal; color:#97591b; line-height:1.4; }
+
+.chart-period-controls { margin: 0 0 18px; }
+.chart-period-controls label { display:grid; gap:6px; font-size:13px; color:var(--muted); min-width:0; }
+.chart-period-controls select,.chart-period-controls input { width:100%; min-width:0; box-sizing:border-box; min-height:44px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fffaf4; color:var(--ink); font:inherit; font-size:16px; }
+#chartCustomRange:not([hidden]) { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; margin-top:10px; }
+#chartPeriodCaption { margin:8px 0 0; font-size:12px; line-height:1.45; color:var(--muted); }
