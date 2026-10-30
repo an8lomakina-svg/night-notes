@@ -1581,8 +1581,9 @@ syncSignOut?.addEventListener('click', async () => {
 function showInstallRecovery() {
   const banner = $('#installRecovery');
   if (!banner) return;
-  const standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
-  banner.hidden = !standalone || !!cloudUser || !!sharedSecretFromLocation();
+  // A missing private URL otherwise looks like a broken, empty notebook.
+  // Keep recovery visible on every blank local notebook, not only in installed apps.
+  banner.hidden = !!cloudUser || !!sharedSecretFromLocation() || hasNotebookEntries(state);
 }
 $('#openInstallRecovery')?.addEventListener('click', () => {
   $('#syncAccount').click();
@@ -2138,3 +2139,7 @@ $('#downloadPreviousCopy')?.addEventListener('click',()=>{
   }catch{$('#backupMessage').textContent='Не удалось прочитать предыдущую копию.';}
 });
 
+
+
+// Lets the static bootstrap distinguish a fully initialized notebook from a failed script load.
+document.documentElement.dataset.appReady = 'true';
