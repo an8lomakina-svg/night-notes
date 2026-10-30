@@ -1994,15 +1994,21 @@ function archivePastInspiration(today) {
   const startedOn = state.dailyInspirationArchiveStart || today;
   let changed = false;
   state.inspirationArchive.filter(item => item.date >= startedOn && item.date < today).forEach(item => {
-    const exists = state.archive.some(entry => entry.source === 'daily-inspiration' && entry.payload?.date === item.date);
-    if (exists) return;
+    const payload = { date:item.date, quote:item.quote, author:item.author, title:item.title, artist:item.artist, info:item.info, source:item.source, image:item.image };
+    const existing = state.archive.find(entry => entry.source === 'daily-inspiration' && entry.payload?.date === item.date);
+    if (existing) {
+      const before = JSON.stringify({ type:existing.type, text:existing.text, payload:existing.payload });
+      Object.assign(existing, { type:'ВДОХНОВЕНИЕ', text:`${item.title} · ${item.artist}`, payload });
+      changed = changed || before !== JSON.stringify({ type:existing.type, text:existing.text, payload:existing.payload });
+      return;
+    }
     state.archive.unshift({
       id: `daily-inspiration-${item.date}`,
       type: 'ВДОХНОВЕНИЕ',
       text: `${item.title} · ${item.artist}`,
       source: 'daily-inspiration',
       archivedAt: new Date(`${item.date}T12:00:00`).toISOString(),
-      payload: { date:item.date, quote:item.quote, author:item.author, title:item.title, artist:item.artist, info:item.info, source:item.source, image:item.image }
+      payload
     });
     changed = true;
   });
