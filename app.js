@@ -1651,18 +1651,31 @@ syncSignOut?.addEventListener('click', async () => {
 });
 
 
+function launchedFromHomeScreen() {
+  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+const recoveryDialog = $('#recoveryDialog');
+function openRecoveryDialog({ homeScreen = false } = {}) {
+  const homeScreenHint = $('#standaloneRecoveryHint');
+  if (homeScreenHint) homeScreenHint.hidden = !homeScreen;
+  if (!recoveryDialog?.open) recoveryDialog?.showModal();
+  if (homeScreen) $('#existingNotebookLink')?.focus({preventScroll:true});
+}
 function showInstallRecovery() {
   const banner = $('#installRecovery');
   if (!banner) return;
   // A missing private URL otherwise looks like a broken, empty notebook.
   // Keep recovery visible on every blank local notebook, not only in installed apps.
-  banner.hidden = !!cloudUser || !!sharedSecretFromLocation() || hasNotebookEntries(state);
+  const isBlankNotebook = !cloudUser && !sharedSecretFromLocation() && !hasNotebookEntries(state);
+  banner.hidden = !isBlankNotebook;
+  // iOS home-screen apps may start in their own empty storage container.
+  // Make recovery explicit so an empty UI never looks like erased data.
+  if (isBlankNotebook && launchedFromHomeScreen()) openRecoveryDialog({ homeScreen: true });
 }
-const recoveryDialog = $('#recoveryDialog');
-$('#openRecoveryDialog')?.addEventListener('click', () => recoveryDialog?.showModal());
+$('#openRecoveryDialog')?.addEventListener('click', () => openRecoveryDialog());
 $('#openInstallRecovery')?.addEventListener('click', () => {
   syncDialog?.close();
-  recoveryDialog?.showModal();
+  openRecoveryDialog();
   $('#existingNotebookLink')?.focus({preventScroll:true});
 });
 $('#connectExistingNotebook')?.addEventListener('click', async () => {
