@@ -237,7 +237,12 @@
 #recoveryDialog #standaloneRecoveryHint[hidden] { display:none; }
 #recoveryDialog #standaloneRecoveryHint strong { display:block; font-size:15px; }
 #recoveryDialog #standaloneRecoveryHint p { margin:6px 0 0; font-size:13px; line-height:1.45; }
-</style></head>
+<style id="email-sync-recovery">
+#recoveryDialog .email-recovery-section p { margin:0; font-size:14px; line-height:1.45; }
+#recoveryDialog .email-recovery-action { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
+#recoveryDialog .email-recovery-action button { white-space:nowrap; }
+@media(max-width:520px) { #recoveryDialog .email-recovery-action { grid-template-columns:1fr; } }
+</style></style></head>
   <body>
     <div class="grain"></div>
     <div class="app-shell">
@@ -386,6 +391,13 @@
             <input id="dataFileInput" type="file" accept=".json,application/json" hidden />
           </div>
           <p id="backupMessage" role="status"></p>
+        </section>
+        <section class="recovery-section email-recovery-section">
+          <h3>Открыть с ярлыка на iPhone</h3>
+          <p>Привяжи этот блокнот к email один раз. Затем на iPhone введи тот же email — записи откроются без приватной ссылки.</p>
+          <label for="syncEmail">Твой email</label>
+          <div class="email-recovery-action"><input id="syncEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="name@example.com" /><button id="requestSyncCode" type="button">Продолжить по email</button></div>
+          <p id="syncEmailMessage" role="status" aria-live="polite"></p>
         </section>
         <section class="recovery-section">
           <h3>Подключить другой блокнот</h3>
