@@ -1,5 +1,5 @@
-const CACHE='night-notes-v31';
-const ASSETS=['./','./index.html','./styles.css?v=53','./app.js?v=96','./manifest.webmanifest','./favicon.svg?v=4'];
+const CACHE='night-notes-v32';
+const ASSETS=['./','./index.html','./styles.css?v=57','./app.js?v=127','./manifest.webmanifest','./favicon.svg?v=4'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{
