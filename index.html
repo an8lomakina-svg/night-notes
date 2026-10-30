@@ -171,6 +171,22 @@
   #budget .budget-summary-metric:nth-child(2) { border-right:0; }
   #budget .budget-summary-metric.is-balance { grid-column:1 / -1; border-top:1px solid rgba(91,61,38,.14); }
 }
+</style><style id="budget-period-filter">
+#budget .budget-period-controls { display:flex; align-items:end; justify-content:flex-end; flex-wrap:wrap; gap:7px 10px; }
+#budget .budget-period-controls label { display:grid; gap:4px; color:#806b59; font:8px "DM Mono",monospace; letter-spacing:.07em; text-transform:uppercase; }
+#budget .budget-period-controls select, #budget .budget-period-controls input { min-height:34px; padding:6px 8px; border:1px solid var(--line); border-radius:4px; background:#fffdf8; color:#493125; font:12px "Space Grotesk",sans-serif; letter-spacing:normal; text-transform:none; }
+#budget #budgetCustomRange { display:flex; gap:6px; }
+#budget #budgetCustomRange[hidden] { display:none; }
+#budget #budgetPeriodCaption { flex-basis:100%; margin:0; color:#806b59; font-size:10px; text-align:right; }
+@media(max-width:760px) {
+  #budget .budget-period-controls { align-items:stretch; justify-content:stretch; width:100%; }
+  #budget .budget-period-controls>label { flex:1; }
+  #budget .budget-period-controls select { width:100%; }
+  #budget #budgetCustomRange { width:100%; }
+  #budget #budgetCustomRange label { flex:1; }
+  #budget #budgetCustomRange input { width:100%; }
+  #budget #budgetPeriodCaption { text-align:left; }
+}
 </style></head>
   <body>
     <div class="grain"></div>
@@ -270,7 +286,11 @@
         <section class="view" id="budget"><div class="page-heading"><p class="eyebrow">MONEY, GENTLY</p><h1>Личный<br /><em>бюджет.</em></h1><p class="section-purpose">Доходы, расходы и запланированные траты. Покупки записывай в отдельной вкладке «Список покупок».</p></div><div class="budget-date-toolbar"><label for="budgetDateOrder">Порядок операций</label><select id="budgetDateOrder" aria-label="Порядок операций по дате"><option value="newest">Сначала новые</option><option value="oldest">Сначала старые</option></select></div><section class="budget-summary" aria-label="Итог бюджета">
   <header class="budget-summary-heading">
     <div><p class="eyebrow">ДВИЖЕНИЕ ДЕНЕГ</p><h2>Общий итог</h2></div>
-    <p>За всё время · без планов и переводов</p>
+    <div class="budget-period-controls">
+      <label>Период<select id="budgetPeriod" aria-label="Период бюджета"><option value="all">За всё время</option><option value="current-month">Этот месяц</option><option value="previous-month">Прошлый месяц</option><option value="last-90">Последние 90 дней</option><option value="custom">Свой период…</option></select></label>
+      <div id="budgetCustomRange" hidden><label>С<input id="budgetPeriodFrom" type="date" aria-label="Начало периода"/></label><label>По<input id="budgetPeriodTo" type="date" aria-label="Конец периода"/></label></div>
+      <p id="budgetPeriodCaption" aria-live="polite">За всё время · без планов и переводов</p>
+    </div>
   </header>
   <div class="budget-summary-metrics">
     <div class="budget-summary-metric is-income"><p class="eyebrow">ПОСТУПИЛО</p><strong id="incomeTotal">—</strong></div>
@@ -357,7 +377,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="sync-core.js?v=2"></script>
     <script src="calendar-import.js?v=2"></script>
-    <script src="app.js?v=124"></script>
+    <script src="app.js?v=125"></script>
     <script id="section-swipe-navigation">
 (() => {
   const menu = document.querySelector('.sidebar nav');
