@@ -1975,7 +1975,11 @@ const inspirationCatalog = [
   { quote:'Будущее зависит от того, что ты делаешь сегодня.', author:'Махатма Ганди', title:'Впечатление. Восход солнца', artist:'Клод Моне, 1872', info:'Гавань Гавра на рассвете. Название этой картины дало имя импрессионизму.', source:'https://en.wikipedia.org/wiki/Impression,_Sunrise', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Monet_-_Impression%2C_Sunrise.jpg/1280px-Monet_-_Impression%2C_Sunrise.jpg' },
   { quote:'Красота спасёт мир.', author:'Фёдор Достоевский', title:'Рождение Венеры', artist:'Сандро Боттичелли, ок. 1485', info:'Богиня Венера выходит из моря на берег Кипра — один из символов флорентийского Возрождения.', source:'https://en.wikipedia.org/wiki/The_Birth_of_Venus', image:'https://commons.wikimedia.org/wiki/Special:FilePath/The%20Birth%20of%20Venus%20%28Botticelli%29%201.jpg?width=1200' }
 ];
-function dailyInspirationIndex(key) { return [...key].reduce((sum, char) => sum + char.charCodeAt(0), 0) % inspirationCatalog.length; }
+function dailyInspirationIndex(key) {
+  // Adjacent dates must advance through the catalogue; summing character codes caused collisions.
+  const day = Math.floor(Date.parse(`${key}T00:00:00Z`) / 86400000);
+  return ((day % inspirationCatalog.length) + inspirationCatalog.length) % inspirationCatalog.length;
+}
 function normalizeInspirationArchive() {
   const byDate = new Map();
   (Array.isArray(state.inspirationArchive) ? state.inspirationArchive : []).forEach(item => {
