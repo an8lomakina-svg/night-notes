@@ -759,7 +759,7 @@ function populateTransferAccounts() {
   $('#transactionCurrency').value = source.currency;
   $('#transactionCurrency').disabled = true;
   const name = $('#transactionName');
-  if (!name.value.trim()) name.value = `Перевод: ${source.label} → ${accountLabel(transferTo.value)}`;
+  if (!name.value.trim()) name.value = 'Перевод между своими счетами';
 }
 function refreshTransactionForm(){
   const type=transactionType.value;
@@ -774,6 +774,9 @@ function refreshTransactionForm(){
   transferFromField.hidden = transferToField.hidden = !isTransfer;
   transferFrom.required=transferTo.required=isTransfer;
   transactionCategory.disabled=isTransfer;
+  transactionCategory.closest('.category-select-row').hidden=isTransfer;
+  const accountControl = $('#budgetAccountControl');
+  if (accountControl) accountControl.hidden=isTransfer;
   $('#transactionCurrency').disabled=isTransfer;
   if (isTransfer) populateTransferAccounts();
 }
