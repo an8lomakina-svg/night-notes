@@ -709,7 +709,47 @@ const budgetEntryCreatedAt = item => {
 };
 let budgetDateOrder = 'newest';
 try { budgetDateOrder = localStorage.getItem('night-notes-budget-date-order') === 'oldest' ? 'oldest' : 'newest'; } catch {}
-const budgetEntriesByDate = (entries = state.budget.transactions) => [...entries].sort((left, right) => {
+const isoDate = date => date.toISOString().slice(0, 10);
+const budgetPeriodLabel = ({ key, from, to }) => {
+  if (key === 'all') return 'За всё время';
+  if (key === 'current-month' || key === 'previous-month') return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date(from + 'T12:00:00'));
+  if (key === 'last-90') return 'Последние 90 дней';
+  return from && to ? `${from.split('-').reverse().join('.')} — ${to.split('-').reverse().join('.')}` : 'Свой период';
+};
+function selectedBudgetPeriod() {
+  const key = $('#budgetPeriod')?.value || 'all';
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  if (key === 'all') return { key, from: '', to: '' };
+  if (key === 'current-month') return { key, from: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`, to: isoDate(today) };
+  if (key === 'previous-month') {
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1, 12);
+    const end = new Date(today.getFullYear(), today.getMonth(), 0, 12);
+    return { key, from: isoDate(start), to: isoDate(end) };
+  }
+  if (key === 'last-90') {
+    const start = new Date(today);
+    start.setDate(today.getDate() - 89);
+    return { key, from: isoDate(start), to: isoDate(today) };
+  }
+  return { key, from: $('#budgetPeriodFrom')?.value || '', to: $('#budgetPeriodTo')?.value || '' };
+}
+function budgetTransactionsForSelectedPeriod(entries = state.budget.transactions) {
+  const period = selectedBudgetPeriod();
+  if (period.key === 'all') return entries;
+  return entries.filter(item => {
+    const date = item.date || '';
+    return Boolean(date) && (!period.from || date >= period.from) && (!period.to || date <= period.to);
+  });
+}
+function refreshBudgetPeriodControls() {
+  const period = selectedBudgetPeriod();
+  const custom = $('#budgetCustomRange');
+  if (custom) custom.hidden = period.key !== 'custom';
+  const caption = $('#budgetPeriodCaption');
+  if (caption) caption.textContent = `${budgetPeriodLabel(period)} · без планов и переводов`;
+}
+const budgetEntriesByDate = (entries = budgetTransactionsForSelectedPeriod()) => [...entries].sort((left, right) => {
   const direction = budgetDateOrder === 'oldest' ? 1 : -1;
   const timestamp = item => Date.parse(`${item.date || ''}T12:00:00`);
   const leftDate = timestamp(left), rightDate = timestamp(right);
@@ -720,9 +760,14 @@ const budgetEntriesByDate = (entries = state.budget.transactions) => [...entries
   if (leftCreated !== null && rightCreated !== null) return (leftCreated - rightCreated) * direction;
   return 0;
 });
-function renderBudget(){ const tx=state.budget.transactions;const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts=Object.create(null);filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${escapeBudgetCategory(key)}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction'+(item.type==='planned'?' transaction-planned':'');row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${accountLabel(item.fromAccount)} → ${accountLabel(item.toAccount)} · `:'';row.querySelector('small').textContent=`${item.type==='planned'?'Запланировано · ':''}${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':item.type==='planned'?'◷ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
+function renderBudget(){ refreshBudgetPeriodControls(); const tx=budgetTransactionsForSelectedPeriod();const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts=Object.create(null);filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${escapeBudgetCategory(key)}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction'+(item.type==='planned'?' transaction-planned':'');row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${accountLabel(item.fromAccount)} → ${accountLabel(item.toAccount)} · `:'';row.querySelector('small').textContent=`${item.type==='planned'?'Запланировано · ':''}${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':item.type==='planned'?'◷ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
 $('#transactionDate').value=new Date().toISOString().slice(0,10);
 $('#budgetCurrencyFilter').onchange=renderBudget;
+const budgetPeriodControl = $('#budgetPeriod');
+budgetPeriodControl?.addEventListener('change', () => { refreshBudgetPeriodControls(); renderBudget(); });
+['#budgetPeriodFrom', '#budgetPeriodTo'].forEach(selector => $(selector)?.addEventListener('change', () => {
+  if (budgetPeriodControl?.value === 'custom') renderBudget();
+}));
 const expenseCategories=['Доставка еды','Рестораны и кофе','Продукты','Такси','Авиабилеты','Дом и аренда','Стоматолог','Аптека и здоровье','Массаж и уход','Связь и подписки','Мобильный кэш · Катя','Красота','Досуг','Прочее'];
 const incomeCategories=['Зарплата','Займ','Перевод от себя','Возврат','Подарок','Другое'];
 const budgetAccounts = [
