@@ -1037,7 +1037,7 @@ function receiptCategory(name, type) {
 }
 function receiptAmountFromLine(line) {
   const currency = '(?:EUR|RSD|RUB|AMD|€|₽|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)';
-  const pattern = new RegExp(`((?:[+−–-]\\s*)?(?:(?:${currency})\\s*)?(?:\\d{1,3}(?:[ \\u00A0,.]\\d{3})*(?:[,.]\\d{2})?|\\d+(?:[,.]\\d{2})?)\\s*(?:${currency})?)`, 'gi');
+  const pattern = new RegExp(`((?:[+−–-]\\s*)?(?:(?:${currency})\\s*)?(?:\\d{1,3}(?:[ \\u00A0,.]\\d{3})+(?:[,.]\\d{2})?|\\d+(?:[,.]\\d{2})?)\\s*(?:${currency})?)`, 'gi');
   const matches = [...line.matchAll(pattern)].map(match => match[1]).filter(value => /[+−–-]|EUR|RSD|RUB|AMD|€|₽|дин|руб|драм|դրամ/i.test(value));
   if (!matches.length) return null;
   const raw = matches[matches.length - 1];
@@ -1060,11 +1060,66 @@ function receiptName(line, fallback) {
     .replace(/[|•]/g, ' ').replace(/\s{2,}/g, ' ').trim();
   return cleaned.length >= 2 ? cleaned.slice(0, 80) : fallback;
 }
-function extractReceiptTransactions(text) {
-  const lines = text.replace(/\r/g, '').split('\n').map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  const fallbackDate = dateKey(new Date());
-  const result = [];
+// Normalize bank rows whose amount and currency are printed on separate lines.
+function receiptBankRows(text) {
+  const lines = text.replace(/\r/g, '').split('\n').map(line => line.trim()).filter(Boolean);
+  const moneyEnd = /(?:^|\s)([+−–-]?\s*\d[\d .\u00a0]*[,.]\d{2})$/;
+  const currencyToken = /\b(?:RSD|EUR|RUB|AMD)\b|€|₽/i;
+  const rows = [];
+  const consumed = new Set();
   lines.forEach((line, index) => {
+    const match = line.match(moneyEnd);
+    if (!match || receiptDate(line, '') || currencyToken.test(line)) return;
+    const details = [];
+    for (let next = index + 1; next < Math.min(lines.length, index + 4); next++) {
+      if (moneyEnd.test(lines[next]) || (!receiptDate(lines[next], '') && receiptAmountFromLine(lines[next]))) break;
+      details.push({line: lines[next], index: next});
+      if (details.some(item => receiptDate(item.line, '')) && details.some(item => currencyToken.test(item.line))) break;
+    }
+    const currency = details.map(item => item.line.match(currencyToken)?.[0]).find(Boolean);
+    const date = details.map(item => receiptDate(item.line, '')).find(Boolean);
+    const name = line.slice(0, match.index).trim();
+    // Require a dated row and a currency, so unrelated numbers are not imported.
+    if (!currency || !date || !/[a-zа-я]/i.test(name)) return;
+    const amount = receiptAmountFromLine(`${match[1]} ${currency}`);
+    if (!amount) return;
+    const continuation = details.filter(item => !receiptDate(item.line, '')).map(item => item.line
+      .replace(/\b(?:RSD|EUR|RUB|AMD)\b|€|₽/gi, '').replace(/^\([a-z]\)\s*/i, '').trim()).filter(Boolean).join(' ');
+    rows.push({name: `${name} ${continuation}`.trim().slice(0, 80), ...amount, date, source: [line, ...details.map(item => item.line)].join(' · ')});
+    consumed.add(index);details.forEach(item => consumed.add(item.index));
+  });
+  return {rows, remaining: lines.filter((_, index) => !consumed.has(index)).join('\n')};
+}
+async function prepareReceiptImage(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = url; });
+    const scale = Math.min(1, 2400 / image.naturalWidth, 6000 / image.naturalHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      const value = (pixels.data[i] * .299 + pixels.data[i + 1] * .587 + pixels.data[i + 2] * .114) > 215 ? 255 : 0;
+      pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = value;
+    }
+    ctx.putImageData(pixels, 0, 0);
+    return canvas;
+  } finally { URL.revokeObjectURL(url); }
+}
+function extractReceiptTransactions(text) {
+  const bank = receiptBankRows(text);
+  const lines = bank.remaining.replace(/\r/g, '').split('\n').map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const fallbackDate = dateKey(new Date());
+  const result = bank.rows.map((item, index) => {
+    const type = receiptDirection(item.source, item.negative);
+    return {...item, id: `receipt-bank-${Date.now()}-${index}`, selected: true, type, category: receiptCategory(item.name, type), time: ''};
+  });
+  lines.forEach((line, index) => {
+    if (/^(?:\([a-z]\)\s*)?\d{1,2}[./-]\d{1,2}[./-]20\d{2}\s*(?:RSD|EUR|RUB|AMD)?$/i.test(line)) return;
     const found = receiptAmountFromLine(line);
     if (!found) return;
     const previous = lines[index - 1] || '';
@@ -1088,7 +1143,7 @@ function extractReceiptTransactions(text) {
       source: line
     });
   });
-  return result.filter((item, index, all) => all.findIndex(other => other.name === item.name && other.amount === item.amount && other.date === item.date) === index).slice(0, 30);
+  return result.slice(0, 30);
 }
 function renderReceiptImport() {
   receiptImportRows.innerHTML = '';
@@ -1140,9 +1195,19 @@ async function startReceiptImport(file) {
   receiptImportSave.disabled = true;
   try {
     const Tesseract = await loadReceiptOcr();
-    const result = await Tesseract.recognize(file, 'rus+eng', { logger: event => {
+    const prepared = await prepareReceiptImage(file).catch(() => file);
+    const worker = await Tesseract.createWorker('rus+eng', 1, { logger: event => {
       if (event.status === 'recognizing text') receiptImportStatus.textContent = `Считываю текст: ${Math.round((event.progress || 0) * 100)}%`;
     }});
+    let result;
+    try {
+      await worker.setParameters({tessedit_pageseg_mode: '6'});
+      result = await worker.recognize(prepared);
+      if (!extractReceiptTransactions(result.data.text || '').length && prepared !== file) {
+        await worker.setParameters({tessedit_pageseg_mode: '3'});
+        result = await worker.recognize(file);
+      }
+    } finally { await worker.terminate(); }
     receiptImportDraft = extractReceiptTransactions(result.data.text || '');
     if (!receiptImportDraft.length) {
       receiptImportStatus.textContent = 'Операций не нашлось. Нужен более чёткий скриншот, где видны сумма и валюта.';

@@ -1,11 +1,12 @@
 const {boot}=require('./harness.cjs'),assert=require('node:assert/strict');
 (async()=>{
  const h=await boot();try{
+  h.w.prepareReceiptImage=async file=>file;
   const input=h.$('#receiptImportImage'),button=h.$('#receiptImportButton');
   assert.equal(input.hasAttribute('capture'),false);
   assert.equal(input.accept,'image/*');
   let clicks=0;input.click=()=>clicks++;button.click();assert.equal(clicks,1);
-  let calls=0;h.w.Tesseract={recognize:async()=>{calls++;return {data:{text:'Coffee -10 EUR'}}}};
+  let calls=0;const ocr=()=>({createWorker:async()=>({setParameters:async p=>assert.equal(p.tessedit_pageseg_mode,'6'),terminate:async()=>{},recognize:async()=>{calls++;return {data:{text:'Coffee -10 EUR'}}}})});h.w.Tesseract=ocr();
   const choose=async(file)=>{Object.defineProperty(input,'files',{configurable:true,value:[file]});h.event(input,'change');await new Promise(r=>setTimeout(r,10));};
   const photo=new h.w.File(['image'],'screenshot.PNG',{type:'image/png'});
   await choose(photo);assert.equal(calls,1);assert.equal(h.w.document.querySelectorAll('.receipt-import-row').length,1);
@@ -18,7 +19,7 @@ const {boot}=require('./harness.cjs'),assert=require('node:assert/strict');
   const load=h.w.loadReceiptOcr();h.w.document.querySelector('script[src*=tesseract]').dispatchEvent(new h.w.Event('error'));
   await assert.rejects(load);assert.equal(h.w.receiptOcrLoading,null);
   const retry=h.w.loadReceiptOcr();const scripts=h.w.document.querySelectorAll('script[src*=tesseract]');assert.equal(scripts.length,2);
-  h.w.Tesseract={recognize:async()=>({data:{text:'Coffee -10 EUR'}})};scripts[1].dispatchEvent(new h.w.Event('load'));await retry;
+  h.w.Tesseract=ocr();scripts[1].dispatchEvent(new h.w.Event('load'));await retry;
   await choose(photo);h.$('#receiptImportSave').click();assert.equal(h.w.audit.state.budget.transactions.length,1);
   assert.deepEqual(h.errors,[]);
   console.log('PASS screenshot picker, repeated selection, missing MIME, invalid-file safety, OCR retry, reviewed import');
