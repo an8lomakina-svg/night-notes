@@ -1091,6 +1091,54 @@ function receiptBankRows(text) {
   });
   return {rows, remaining: lines.filter((_, index) => !consumed.has(index)).join('\n')};
 }
+// Keep bank columns separate using OCR coordinates instead of flattened text.
+function receiptPositionedRows(data) {
+  const words = (data.words || []).filter(w => w.text && w.bbox && ['x0','y0','x1','y1'].every(k => Number.isFinite(w.bbox[k])));
+  if (!words.length) return [];
+  const right = Math.max(...words.map(w => w.bbox.x1));
+  const money = words.filter(w => w.bbox.x0 > right * .65 && /^[+−–-]?\d[\d.,]*[,.]\d{2}$/.test(w.text)).sort((a,b) => a.bbox.y0-b.bbox.y0);
+  const rows = [];
+  money.forEach((amountWord, index) => {
+    const box = amountWord.bbox, height = box.y1-box.y0;
+    const bottom = Math.min(money[index+1]?.bbox.y0 ?? Infinity, box.y1 + height * 3);
+    const band = words.filter(w => w.bbox.y0 >= box.y0-height*.3 && w.bbox.y1 < bottom);
+    const currency = band.find(w => /^(RSD|EUR|RUB|AMD|€|₽)$/i.test(w.text) && w.bbox.x0 > right*.7);
+    const dateWord = band.find(w => /^\d{1,2}[./-]\d{1,2}[./-]20\d{2}$/.test(w.text) && w.bbox.x1 < box.x0);
+    if (!currency || !dateWord) return;
+    const amount = receiptAmountFromLine(`${amountWord.text} ${currency.text}`);
+    const date = receiptDate(dateWord.text, '');
+    if (!amount || !date) return;
+    const left = dateWord.bbox.x0-height*.25;
+    const candidates = band.filter(w => w.bbox.x0 >= left && w.bbox.x1 < box.x0-height && w.bbox.y0 < dateWord.bbox.y0-height*.2 && w !== dateWord);
+    const lines = [];
+    candidates.sort((a,b)=>a.bbox.y0-b.bbox.y0 || a.bbox.x0-b.bbox.x0).forEach(w => {
+      let line = lines.find(line => Math.abs(line[0].bbox.y0-w.bbox.y0) < height*.35);
+      if (!line) lines.push(line=[]);
+      line.push(w);
+    });
+    const name = lines.map(line => {
+      line.sort((a,b)=>a.bbox.x0-b.bbox.x0);
+      const kept = [];
+      for (const word of line) {
+        const previous = kept[kept.length-1];
+        // A wide gap separates merchant from terminal/location columns.
+        if (previous && word.bbox.x0-previous.bbox.x1 > height*2) break;
+        kept.push(word);
+      }
+      return kept.map(w=>w.text).join(' ');
+    }).join(' ').replace(/\s*[~|]+\s*/g,' ').trim();
+    if (!/[a-zа-я]/i.test(name)) return;
+    const type = receiptDirection(name, amount.negative);
+    rows.push({...amount, name: name.slice(0,80), date, type, category: receiptCategory(name,type), id: `receipt-position-${Date.now()}-${index}`, selected: true, time:'', source: band.map(w=>w.text).join(' ')});
+  });
+  return rows.slice(0,30);
+}
+function extractReceiptOcr(data) {
+  const plain = extractReceiptTransactions(data.text || '');
+  const positioned = receiptPositionedRows(data);
+  return positioned.length && positioned.length >= plain.length ? positioned : plain;
+}
+
 async function prepareReceiptImage(file) {
   const url = URL.createObjectURL(file);
   try {
@@ -1206,13 +1254,21 @@ async function startReceiptImport(file) {
     try {
       await worker.setParameters({tessedit_pageseg_mode: '6'});
       result = await worker.recognize(prepared);
-      if (!extractReceiptTransactions(result.data.text || '').length && prepared !== file) {
+      // Latin bank screens can acquire isolated Cyrillic lookalikes in bilingual OCR.
+      const text = result.data.text || '';
+      if ((text.match(/[a-z]/gi) || []).length >= 40 && /[а-яё]/i.test(text) && !/[а-яё]{3,}/i.test(text) && receiptPositionedRows(result.data).length >= 2) {
+        await worker.reinitialize('eng');
+        await worker.setParameters({tessedit_pageseg_mode: '6'});
+        const latin = await worker.recognize(prepared);
+        if (extractReceiptOcr(latin.data).length >= extractReceiptOcr(result.data).length) result = latin;
+      }
+      if (!extractReceiptOcr(result.data).length && prepared !== file) {
         await worker.setParameters({tessedit_pageseg_mode: '3'});
         result = await worker.recognize(file);
       }
     } finally { await worker.terminate(); }
     if (request !== receiptImportRequest) return;
-    receiptImportDraft = extractReceiptTransactions(result.data.text || '');
+    receiptImportDraft = extractReceiptOcr(result.data);
     if (!receiptImportDraft.length) {
       receiptImportStatus.textContent = 'Операций не нашлось. Нужен более чёткий скриншот, где видны сумма и валюта.';
       return;
