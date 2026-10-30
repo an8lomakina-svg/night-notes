@@ -187,6 +187,14 @@
   #budget #budgetCustomRange input { width:100%; }
   #budget #budgetPeriodCaption { text-align:left; }
 }
+</style><style id="budget-midwidth-layout">
+@media (max-width:1200px) and (min-width:761px) {
+  #budget .budget-layout { grid-template-columns:1fr; }
+  #budget .budget-entry-card .budget-form { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #budget .budget-entry-card #transactionName,
+  #budget .budget-entry-card #transactionComment { grid-column:1 / -1; }
+  #budget .budget-entry-card .transfer-account-field { grid-column:auto; }
+}
 </style></head>
   <body>
     <div class="grain"></div>
