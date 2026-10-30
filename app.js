@@ -988,6 +988,7 @@ const receiptImportStatus = $('#receiptImportStatus');
 const receiptImportRows = $('#receiptImportRows');
 const receiptImportSave = $('#receiptImportSave');
 let receiptImportDraft = [];
+let receiptImportRequest = 0;
 
 function loadReceiptOcr() {
   if (window.Tesseract) return Promise.resolve(window.Tesseract);
@@ -1180,8 +1181,10 @@ function renderReceiptImport() {
 }
 async function startReceiptImport(file) {
   if (!file) return;
+  const request = ++receiptImportRequest;
   receiptImportInput.value = '';
   receiptImportReview.hidden = false;
+  receiptImportReview.scrollIntoView({block: 'start', behavior: 'smooth'});
   receiptImportRows.innerHTML = '';
   receiptImportDraft = [];
   receiptImportSave.disabled = true;
@@ -1197,7 +1200,7 @@ async function startReceiptImport(file) {
     const Tesseract = await loadReceiptOcr();
     const prepared = await prepareReceiptImage(file).catch(() => file);
     const worker = await Tesseract.createWorker('rus+eng', 1, { logger: event => {
-      if (event.status === 'recognizing text') receiptImportStatus.textContent = `Считываю текст: ${Math.round((event.progress || 0) * 100)}%`;
+      if (request === receiptImportRequest && event.status === 'recognizing text') receiptImportStatus.textContent = `Считываю текст: ${Math.round((event.progress || 0) * 100)}%`;
     }});
     let result;
     try {
@@ -1208,20 +1211,24 @@ async function startReceiptImport(file) {
         result = await worker.recognize(file);
       }
     } finally { await worker.terminate(); }
+    if (request !== receiptImportRequest) return;
     receiptImportDraft = extractReceiptTransactions(result.data.text || '');
     if (!receiptImportDraft.length) {
       receiptImportStatus.textContent = 'Операций не нашлось. Нужен более чёткий скриншот, где видны сумма и валюта.';
       return;
     }
-    receiptImportStatus.textContent = `Нашлось ${receiptImportDraft.length} операций. Проверь перед добавлением: распознавание может ошибаться.`;
+    receiptImportStatus.textContent = `Нашлось ${receiptImportDraft.length} операций. Проверь список ниже. В бюджет пока ничего не добавлено.`;
     renderReceiptImport();
+    receiptImportReview.focus({preventScroll: true});
+    receiptImportReview.scrollIntoView({block: 'start', behavior: 'smooth'});
   } catch (error) {
+    if (request !== receiptImportRequest) return;
     receiptImportStatus.textContent = 'Не получилось прочитать этот скриншот. Попробуй более чёткое изображение или добавь операции вручную.';
   }
 }
 receiptImportButton?.addEventListener('click', () => receiptImportInput.click());
 receiptImportInput?.addEventListener('change', event => startReceiptImport(event.target.files?.[0]));
-$('#receiptImportClose')?.addEventListener('click', () => { receiptImportReview.hidden = true; receiptImportDraft = []; });
+$('#receiptImportClose')?.addEventListener('click', () => { receiptImportRequest++; receiptImportReview.hidden = true; receiptImportDraft = []; receiptImportRows.innerHTML = ''; receiptImportSave.disabled = true; });
 receiptImportSave?.addEventListener('click', () => {
   const selected = receiptImportDraft.filter(item => item.selected).map((item, index) => ({
     ...item,

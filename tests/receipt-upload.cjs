@@ -20,7 +20,16 @@ const {boot}=require('./harness.cjs'),assert=require('node:assert/strict');
   await assert.rejects(load);assert.equal(h.w.receiptOcrLoading,null);
   const retry=h.w.loadReceiptOcr();const scripts=h.w.document.querySelectorAll('script[src*=tesseract]');assert.equal(scripts.length,2);
   h.w.Tesseract=ocr();scripts[1].dispatchEvent(new h.w.Event('load'));await retry;
-  await choose(photo);h.$('#receiptImportSave').click();assert.equal(h.w.audit.state.budget.transactions.length,1);
+  await choose(photo);
+  assert.equal(h.w.document.activeElement,h.$('#receiptImportReview'));
+  assert(h.$('#receiptImportReview').compareDocumentPosition(h.$('#budgetForm')) & 4);
+  const checkbox=h.$('.receipt-check input');checkbox.checked=false;h.event(checkbox,'change');
+  h.$('#receiptImportSave').click();assert.equal(h.w.audit.state.budget.transactions.length,0);
+  checkbox.checked=true;h.event(checkbox,'change');h.set('.receipt-amount','12.50');
+  h.$('#receiptImportSave').click();assert.equal(h.w.audit.state.budget.transactions.length,1);
+  assert.equal(h.w.audit.state.budget.transactions[0].amount,12.5);
+  await choose(photo);h.$('#receiptImportClose').click();assert(h.$('#receiptImportReview').hidden);
+  assert(h.$('#receiptImportSave').disabled);assert.equal(h.w.audit.state.budget.transactions.length,1);
   assert.deepEqual(h.errors,[]);
   console.log('PASS screenshot picker, repeated selection, missing MIME, invalid-file safety, OCR retry, reviewed import');
  }finally{h.close();}

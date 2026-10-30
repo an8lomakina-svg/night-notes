@@ -858,7 +858,7 @@ button.health-quick-card { font:inherit; }
 .budget-entry-actions { margin-left: auto; }
 .receipt-import-button { min-height: 42px; padding: 9px 12px; border: 1px solid var(--line); background: #fffaf4; color: var(--ink); font: inherit; font-weight: 700; border-radius: 8px; cursor: pointer; }
 .receipt-import-button:hover { border-color: var(--accent); color: var(--accent); }
-.receipt-import-review { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.receipt-import-review { scroll-margin-top: 100px; margin-bottom: 24px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
 .receipt-import-title { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
 .receipt-import-title h3 { margin: 3px 0 0; font-size: 1.2rem; }
 .receipt-import-status { margin: 12px 0; color: var(--muted); }
