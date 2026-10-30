@@ -769,7 +769,9 @@ function refreshTransactionForm(){
   transactionCategory.required=!isTransfer;
   transactionCategory.innerHTML=`<option value="" disabled>Выберите категорию</option>${categories.map(category=>`<option>${escapeBudgetCategory(category)}</option>`).join('')}`;
   transactionCategory.value=isTransfer ? categories[0] : (categories.includes(previous)?previous:'');
-  transferFrom.hidden=transferTo.hidden=!isTransfer;
+  const transferFromField = $('#transferFromField');
+  const transferToField = $('#transferToField');
+  transferFromField.hidden = transferToField.hidden = !isTransfer;
   transferFrom.required=transferTo.required=isTransfer;
   transactionCategory.disabled=isTransfer;
   $('#transactionCurrency').disabled=isTransfer;
@@ -1668,7 +1670,7 @@ function mountBudgetJourney() {
   const quick = document.createElement('div');
   quick.className = 'budget-quick-actions';
   quick.setAttribute('aria-label', 'Быстрые действия бюджета');
-  quick.innerHTML = '<button type="button" class="budget-quick-action is-active" data-budget-action="expense"><span>−</span><strong>Расход</strong><small>покупка или услуга</small></button><button type="button" class="budget-quick-action" data-budget-action="income"><span>＋</span><strong>Доход</strong><small>зарплата, возврат или перевод</small></button><button type="button" class="budget-quick-action" data-budget-action="planned"><span>◷</span><strong>План</strong><small>не влияет на остаток</small></button>';
+  quick.innerHTML = '<button type="button" class="budget-quick-action is-active" data-budget-action="expense"><span>−</span><strong>Расход</strong><small>покупка или услуга</small></button><button type="button" class="budget-quick-action" data-budget-action="income"><span>＋</span><strong>Доход</strong><small>зарплата или возврат</small></button><button type="button" class="budget-quick-action" data-budget-action="planned"><span>◷</span><strong>План</strong><small>не влияет на остаток</small></button><button type="button" class="budget-quick-action" data-budget-action="transfer"><span>⇄</span><strong>Перевод</strong><small>между своими счетами</small></button>';
   form.before(quick);
   const entryHeading = section.querySelector('.budget-entry-heading h2');
   if (entryHeading) entryHeading.textContent = 'Добавить запись';
