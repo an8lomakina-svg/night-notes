@@ -115,6 +115,28 @@ let pendingSync = null;
 try { pendingSync = JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || 'null'); } catch {}
 let localRevision = Number(pendingSync?.revision) || 0;
 let cloudPushPromise = null, sharedPushPromise = null;
+let syncRetryTimer = null, syncRetryDelay = 2000, cloudInitPromise = null;
+function scheduleSyncRetry() {
+  if(syncRetryTimer || navigator.onLine === false)return;
+  syncRetryTimer=setTimeout(()=>{syncRetryTimer=null;refreshNotebookConnection();},syncRetryDelay);
+  syncRetryDelay=Math.min(syncRetryDelay*2,30000);
+}
+function clearSyncRetry() { clearTimeout(syncRetryTimer);syncRetryTimer=null;syncRetryDelay=2000; }
+// Private notebooks can use the same encrypted RPC protocol even when the
+// optional email SDK CDN is unavailable. Never create a replacement identity.
+async function sharedRpc(name,args) {
+  if(cloudClient)return cloudClient.rpc(name,args);
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+  try {
+    const response=await fetch(SYNC_CONFIG.url+'/rest/v1/rpc/'+name,{
+      method:'POST',headers:{apikey:SYNC_CONFIG.key,'Content-Type':'application/json'},
+      body:JSON.stringify(args),signal:controller.signal
+    });
+    if(!response.ok)throw new Error('sync_http_'+response.status);
+    const text=await response.text();
+    return {data:text?JSON.parse(text):null};
+  } finally {clearTimeout(timer);}
+}
 let lastSavedState = NotebookSync.clone(state);
 const SYNC_BASE_KEY='night-notes-sync-base-v2';
 const SYNC_CONFLICT_KEY='night-notes-sync-conflict-v1';
@@ -250,10 +272,14 @@ function sharedSecretFromLocation() {
   const installedSecret = installSecret();
   if (installedSecret) return installedSecret;
   const rememberedSecret = localStorage.getItem(SHARED_SECRET_KEY);
-  return validSharedSecret(rememberedSecret) ? rememberedSecret : null;
+  if(validSharedSecret(rememberedSecret))return rememberedSecret;
+  // The last successful sync target is another existing local identity, not
+  // permission to guess a notebook. Do not revive it during email migration.
+  const target=localStorage.getItem(SYNC_TARGET_KEY);
+  const previous=target?.startsWith('shared:')?target.slice(7):null;
+  return !emailMigrationPending() && validSharedSecret(previous) ? previous : null;
 }
 async function ensureSharedSync({create=false}={}) {
-  if (!cloudClient) return null;
   if (!sharedSync) {
     const secret = sharedSecretFromLocation() || (create ? newSharedSecret() : null);
     // Never silently make a blank notebook when the private link was lost.
@@ -266,16 +292,16 @@ async function ensureSharedSync({create=false}={}) {
   return sharedSync;
 }
 function queueSharedSave() {
-  if (!cloudClient || !sharedSync || sharedHydrating || cloudUser) return;
+  if (!sharedSync || sharedHydrating || cloudUser) return;
   clearTimeout(sharedSyncTimer);
   sharedSyncTimer = setTimeout(() => { sharedSyncTimer = null; if (sharedSync && hasPendingSync('shared:' + sharedSync.secret)) pushSharedState(); }, 300);
 }
 function sharedConnection() {
   const notebook=sharedSync;
-  if(!cloudClient || !notebook)return null;
+  if(!notebook)return null;
   return {target:'shared:'+notebook.secret,current:()=>sharedSync?.id===notebook.id,
-    read:async()=>{const {data,error}=await cloudClient.rpc('get_shared_notebook',{p_sync_id:notebook.id});if(error)throw error;return data ? decryptSharedState(notebook.secret,data) : null;},
-    write:async snapshot=>{const payload=await encryptSharedState(notebook.secret,snapshot);const {error}=await cloudClient.rpc('save_shared_notebook',{p_sync_id:notebook.id,p_payload:payload});if(error)throw error;}};
+    read:async()=>{const {data,error}=await sharedRpc('get_shared_notebook',{p_sync_id:notebook.id});if(error)throw error;return data ? decryptSharedState(notebook.secret,data) : null;},
+    write:async snapshot=>{const payload=await encryptSharedState(notebook.secret,snapshot);const {error}=await sharedRpc('save_shared_notebook',{p_sync_id:notebook.id,p_payload:payload});if(error)throw error;}};
 }
 function pushSharedState() { return runSharedSync(true); }
 function hydrateSharedState() { return cloudUser ? Promise.resolve(false) : runSharedSync(); }
@@ -346,7 +372,7 @@ async function syncNotebook(connection,upload) {
           }
         } catch {}
       }
-      if(!needsUpload){setSyncStatus('Изменения синхронизированы',true);return true;}
+      if(!needsUpload){clearSyncRetry();setSyncStatus('Изменения синхронизированы',true);return true;}
       const revision=localRevision;
       const outgoing=NotebookSync.clone(state);
       outgoing._sync={...outgoing._sync,commit:recordId(),ancestors:[...new Set([...(remote?._sync?.ancestors || []),remote?._sync?.commit,...(base?._sync?.ancestors || []),base?._sync?.commit].filter(Boolean))].slice(-64)};
@@ -357,13 +383,14 @@ async function syncNotebook(connection,upload) {
       if(!sameNotebook(verified,outgoing)){upload=true;continue;}
       localStorage.setItem(SYNC_BASE_KEY,JSON.stringify({target,state:outgoing}));
       acknowledgeSync(target,revision);
-      if(!hasPendingSync(target)){setSyncStatus('Изменения синхронизированы',true);return true;}
+      if(!hasPendingSync(target)){clearSyncRetry();setSyncStatus('Изменения синхронизированы',true);return true;}
       upload=true;
     }
     setSyncStatus('Сохранено на устройстве · синхронизация продолжится');
     setTimeout(()=>cloudUser?hydrateCloudState():hydrateSharedState(),300);
   } catch {
-    setSyncStatus('Синхронизация не завершена · локальная копия сохранена');
+    setSyncStatus('Подключение прервалось · повторю автоматически');
+    scheduleSyncRetry();
   }
   return false;
 }
@@ -1941,10 +1968,19 @@ function hasNotebookEntries(source) {
 
 function hydrateCloudState() { return runCloudSync(); }
 
-async function initCloudSync() {
-  if(!window.supabase?.createClient){setSyncStatus('Синхронизация недоступна');return;}
-  cloudClient=window.supabase.createClient(SYNC_CONFIG.url,SYNC_CONFIG.key);
+function initCloudSync() {
+  if(cloudInitPromise)return cloudInitPromise;
+  cloudInitPromise=initializeCloudConnection().finally(()=>{cloudInitPromise=null;});
+  return cloudInitPromise;
+}
+async function initializeCloudConnection() {
   try {
+    if(!window.supabase?.createClient){
+      if(!emailMigrationPending() && await ensureSharedSync())await hydrateSharedState();
+      else {setSyncStatus('Ожидаю подключение синхронизации…');scheduleSyncRetry();}
+      return;
+    }
+    cloudClient=window.supabase.createClient(SYNC_CONFIG.url,SYNC_CONFIG.key);
     const sharedSecret=sharedSecretFromLocation();
     const migratingToEmail=emailMigrationPending();
     // The migration flag is set only by an explicit user action. It lets a magic-link
@@ -1982,7 +2018,7 @@ async function initCloudSync() {
       },0);
       else if(changed)setSyncStatus('Записи сохраняются на устройстве · синхронизация не подключена');
     });
-  } catch {setSyncStatus('Синхронизация недоступна · локальная копия сохранена');}
+  } catch {setSyncStatus('Подключение прервалось · повторю автоматически');scheduleSyncRetry();}
 }
 
 // A browser with an active session always refreshes when the notebook becomes
@@ -1992,24 +2028,23 @@ function refreshCloudStateWhenVisible() {
   hydrateCloudState();
 }
 async function refreshSharedStateWhenVisible() {
-  if (sharedHydrating || cloudUser || !cloudClient) return;
+  if (sharedHydrating || cloudUser || emailMigrationPending()) return;
   if (!sharedSync && !(await ensureSharedSync())) return;
   hydrateSharedState();
 }
-window.addEventListener('focus', () => {
+function refreshNotebookConnection() {
+  if(cloudInitPromise)return;
+  if(!cloudClient && (window.supabase?.createClient || !sharedSync)){initCloudSync().finally(showInstallRecovery);return;}
   refreshCloudStateWhenVisible();
   refreshSharedStateWhenVisible();
+}
+window.addEventListener('focus',refreshNotebookConnection);
+window.addEventListener('online',refreshNotebookConnection);
+window.addEventListener('pageshow',refreshNotebookConnection);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible')refreshNotebookConnection();
 });
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    refreshCloudStateWhenVisible();
-    refreshSharedStateWhenVisible();
-  }
-});
-
-// Retry pending writes after reconnecting, and start sending before iOS suspends the app.
-window.addEventListener('online', () => { refreshCloudStateWhenVisible(); refreshSharedStateWhenVisible(); });
-window.addEventListener('pageshow', () => { refreshCloudStateWhenVisible(); refreshSharedStateWhenVisible(); });
+// Start sending before iOS suspends the app.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
     if (cloudUser && hasPendingSync('user:' + cloudUser.id)) pushCloudState();
@@ -2177,7 +2212,6 @@ $('#connectExistingNotebook')?.addEventListener('click', async () => {
     if (link.origin !== location.origin || !['', 'index.html'].includes(link.pathname.slice(new URL('.', location.href).pathname.length)) ||
         !link.pathname.startsWith(new URL('.', location.href).pathname) || !validSharedSecret(secret)) throw new Error();
   } catch { message.textContent = 'Вставь приватную ссылку на этот блокнот с параметром sync.'; return; }
-  if (!cloudClient) { message.textContent = 'Синхронизация ещё недоступна. Проверь интернет и повтори.'; return; }
   if (cloudUser || sharedHydrating || cloudHydrating || sharedPushPromise || cloudPushPromise) {
     message.textContent = 'Дождись завершения синхронизации. Если выполнен вход по email, сначала выйди из него.'; return;
   }
@@ -2190,7 +2224,7 @@ $('#connectExistingNotebook')?.addEventListener('click', async () => {
   const revision = localRevision;
   try {
     const id=await sharedId(secret);
-    const {data,error} = await cloudClient.rpc('get_shared_notebook', {p_sync_id:id});
+    const {data,error} = await sharedRpc('get_shared_notebook', {p_sync_id:id});
     if (error || !data) throw new Error('missing');
     const remote = await decryptSharedState(secret, data);
     if (!NotebookSync.valid(remote)) throw new Error('invalid');

@@ -14,7 +14,7 @@ async function boot(opts={}){
  w.URL.createObjectURL=b=>{downloads.push(b);return 'blob:test'};w.URL.revokeObjectURL=()=>{};
  const anchorClick=w.HTMLAnchorElement.prototype.click;w.HTMLAnchorElement.prototype.click=function(){if(!this.download)anchorClick.call(this)};
  Object.defineProperty(w.navigator,'clipboard',{value:{writeText:async t=>external.push(t)}});
- w.fetch=async()=>{throw Error('External network blocked by test harness')};
+ w.fetch=opts.fetch || (async()=>{throw Error('External network blocked by test harness')});
  if(opts.storage)for(const[k,v]of Object.entries(opts.storage))w.localStorage.setItem(k,v);
  if(opts.cookie)w.document.cookie=opts.cookie;
  if(opts.client)w.supabase={createClient:()=>opts.client};
