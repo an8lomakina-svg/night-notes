@@ -1107,11 +1107,12 @@ function receiptCategory(name, type) {
   return 'Прочее';
 }
 function receiptAmountFromLine(line) {
-  const currency = '(?:EUR|RSD|RUB|AMD|€|₽|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)';
+  const currency = '(?:EUR|RSD|RUB|AMD|€|₽|֏|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)';
   const pattern = new RegExp(`((?:[+−–-]\\s*)?(?:(?:${currency})\\s*)?(?:\\d{1,3}(?:[ \\u00A0,.]\\d{3})+(?:[,.]\\d{2})?|\\d+(?:[,.]\\d{2})?)\\s*(?:${currency})?)`, 'gi');
-  const matches = [...line.matchAll(pattern)].map(match => match[1]).filter(value => /[+−–-]|EUR|RSD|RUB|AMD|€|₽|дин|руб|драм|դրամ/i.test(value));
+  const matches = [...line.matchAll(pattern)].map(match => match[1]).filter(value => /[+−–-]|EUR|RSD|RUB|AMD|€|₽|֏|дин|руб|драм|դրամ/i.test(value));
   if (!matches.length) return null;
   const raw = matches[matches.length - 1];
+  if(!/EUR|RSD|RUB|AMD|€|₽|֏|дин|руб|драм|դրամ/i.test(raw))return null;
   const negative = /^[\s]*[-−–]/.test(raw);
   const number = raw.replace(/[^0-9,.-]/g, '').replace(/[−–]/g, '-').replace(/\s/g, '');
   const normalized = number.includes(',') && number.includes('.') ? number.replace(/\./g, '').replace(',', '.') : number.replace(',', '.');
@@ -1126,7 +1127,7 @@ function receiptDirection(line, negative) {
 }
 function receiptName(line, fallback) {
   const cleaned = line
-    .replace(/[+−–-]?\s*(?:EUR|RSD|RUB|AMD|€|₽|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)?\s*\d[\d\s.,]*\s*(?:EUR|RSD|RUB|AMD|€|₽|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)?/gi, '')
+    .replace(/[+−–-]?\s*(?:EUR|RSD|RUB|AMD|€|₽|֏|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)?\s*\d[\d\s.,]*\s*(?:EUR|RSD|RUB|AMD|€|₽|֏|дин(?:ара|\.)?|руб(?:лей|ля|\.)?|драм(?:а|ов)?|դրամ)?/gi, '')
     .replace(/\b(?:20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[./-]\d{1,2}(?:[./-]20\d{2})?|\d{1,2}:\d{2})\b/g, '')
     .replace(/[|•]/g, ' ').replace(/\s{2,}/g, ' ').trim();
   return cleaned.length >= 2 ? cleaned.slice(0, 80) : fallback;
@@ -1225,6 +1226,48 @@ function receiptAmountParts(prepared, box) {
   const areas=[{x0:0,y0:0,x1:cut,y1:canvas.height},{x0:last[0].x0,y0:Math.min(...last.map(r=>r.y0)),x1:last[1].x1,y1:Math.max(...last.map(r=>r.y1))}];
   return areas.map(area=>{const part=document.createElement('canvas');part.width=(area.x1-area.x0)*4+40;part.height=(area.y1-area.y0)*4+40;const p=part.getContext('2d');p.fillStyle='#fff';p.fillRect(0,0,part.width,part.height);p.drawImage(canvas,area.x0,area.y0,area.x1-area.x0,area.y1-area.y0,20,20,part.width-40,part.height-40);return part;});
 }
+// Read pale currency glyphs separately from amounts. Whole-screen OCR often
+// turns € into < and ֏ into a digit or an Armenian letter.
+async function refineReceiptCurrencies(worker, prepared, data) {
+  if(!prepared.receiptSource)return;
+  const words=(data.words||[]).filter(w=>w.text&&w.bbox);
+  const right=Math.max(...words.map(w=>w.bbox.x1));
+  const amounts=words.filter(w=>w.bbox.x0>right*.65&&/^[+−–-]?\d[\d.,]*[.,]\d{2}$/.test(w.text));
+  let initialized=false;
+  for(const amount of amounts){
+    const b=amount.bbox,h=b.y1-b.y0;
+    const glyph=words.find(w=>w!==amount&&w.bbox.x0>=b.x1-2&&w.bbox.x0-b.x1<h*1.5&&Math.abs(w.bbox.y0-b.y0)<h*.5&&w.text.length<=2);
+    if(!glyph||/^(?:€|֏)$/u.test(glyph.text))continue;
+    // Only the single symbol immediately to the right of the amount is read.
+    const g=glyph.bbox,source=prepared.receiptSource,scale=source.naturalWidth/prepared.width;
+    const c=document.createElement('canvas');c.width=Math.ceil(g.x1-g.x0)+8;c.height=Math.ceil(g.y1-g.y0)+8;
+    const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+    ctx.drawImage(source,(g.x0-4)*scale,(g.y0-4)*scale,c.width*scale,c.height*scale,0,0,c.width,c.height);
+    const pixels=ctx.getImageData(0,0,c.width,c.height).data,points=[];
+    for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++){const i=(y*c.width+x)*4;if(pixels[i]*.299+pixels[i+1]*.587+pixels[i+2]*.114<210)points.push({x,y});}
+    if(!points.length)continue;
+    const x0=Math.min(...points.map(p=>p.x)),x1=Math.max(...points.map(p=>p.x)),y0=Math.min(...points.map(p=>p.y)),y1=Math.max(...points.map(p=>p.y));
+    const lower=points.filter(p=>p.y>=y0+(y1-y0)*.75),upper=points.filter(p=>p.y<y0+(y1-y0)*.5);
+    const span=ps=>Math.max(...ps.map(p=>p.x))-Math.min(...ps.map(p=>p.x));
+    // A dram glyph has a narrow right stem below its two crossbars. Keep a
+    // review warning for this visual fallback; never infer currency from bank.
+    const dram=lower.length&&upper.length&&span(lower)<(x1-x0)*.25&&Math.min(...lower.map(p=>p.x))>x0+(x1-x0)*.6&&span(upper)>(x1-x0)*.8;
+    if(dram){amount.receiptCurrency='AMD';amount.receiptCurrencyUncertain=true;continue;}
+    if(!initialized){await worker.reinitialize('eng+hye');initialized=true;}
+    const enlarged=document.createElement('canvas');enlarged.width=c.width*4+24;enlarged.height=c.height*4+24;
+    const e=enlarged.getContext('2d');e.fillStyle='#fff';e.fillRect(0,0,enlarged.width,enlarged.height);e.drawImage(c,12,12,c.width*4,c.height*4);
+    await worker.setParameters({tessedit_pageseg_mode:'10',tessedit_char_whitelist:'€֏'});
+    let result=(await worker.recognize(enlarged)).data;
+    if(result.confidence<70||!/[€֏]/.test(result.text)){
+      await worker.setParameters({tessedit_pageseg_mode:'13'});
+      result=(await worker.recognize(enlarged)).data;
+    }
+    const symbol=result.text.trim();
+    if((symbol==='€'||symbol==='֏')&&result.confidence>=70)amount.receiptCurrency=symbol==='€'?'EUR':'AMD';
+    else {amount.receiptCurrency='';amount.receiptCurrencyUncertain=true;}
+  }
+  if(initialized)await worker.setParameters({tessedit_char_whitelist:'',tessedit_pageseg_mode:'6'});
+}
 async function refineReceiptAmounts(worker, prepared, data) {
   const rows=receiptLayout(data).rows;
   const targets=rows.map(row=>({row,parts:receiptAmountParts(prepared,row.crop)})).filter(x=>x.parts);
@@ -1271,16 +1314,19 @@ function receiptLayout(data) {
   const headers=(data.lines||[]).map(line=>({date:receiptMonthDate(line.text||''),y:line.bbox?.y0})).filter(x=>x.date&&Number.isFinite(x.y));
   const headerCurrency=(data.text||'').match(/(?:Mastercard|Visa)[\s\S]{0,70}?\b(AMD|EUR|RSD|RUB)\b/i)?.[1]?.toUpperCase();
   const currencyOf=text=> /^(?:EUR|€)$/i.test(text)?'EUR':/^(?:AMD|֏)$/i.test(text)?'AMD':/^(?:RSD|din)$/i.test(text)?'RSD':/^(?:RUB|₽)$/i.test(text)?'RUB':null;
-  const candidates=words.filter(w=>w.bbox.x0>right*.65 && /\d{2}/.test(w.text) && /^[+−–-]?[\dOoОо.,;]+(?:[а-яa-z]{1,2})?$/i.test(w.text) && (!headers.length || w.bbox.y0>headers[0].y));
+  const candidates=words.filter(w=>w.bbox.x0>right*.65 && /\d{2}/.test(w.text) && /^[+−–-]?[\dOoОо.,;]+(?:[а-яa-z]{1,2})?$/i.test(w.text));
   const rows=[];
   candidates.sort((a,b)=>a.bbox.y0-b.bbox.y0).forEach((word,index)=>{
     const box=word.bbox,h=box.y1-box.y0;
     if(h<10)return;
+    // Before the first visible date, retain monetary rows but not numbers in
+    // the date-range filter at the top of the banking screen.
+    if(headers.length&&box.y0<headers[0].y&&receiptDecimal(word.text)===null)return;
     const near=words.filter(w=>w!==word && w.bbox.x0>right*.7 && w.bbox.y0>=box.y0-h*.3 && w.bbox.y0<box.y1+h*1.8);
     const cur=near.find(w=>currencyOf(w.text));
-    const inline=cur?cur.bbox.y0<box.y1:!!headers.length;
-    const currency=cur?currencyOf(cur.text):headerCurrency;
-    if(!currency)return;
+    const inline=word.receiptCurrency!==undefined || (cur?cur.bbox.y0<box.y1:!!headers.length);
+    const currency=word.receiptCurrency ?? (cur?currencyOf(cur.text):headerCurrency);
+    if(currency===undefined || currency===null)return;
     const next=candidates.slice(index+1).find(w=>w.bbox.y0>box.y1);
     const bottom=Math.min(next?.bbox.y0??Infinity,box.y1+h*4);
     const band=words.filter(w=>w.bbox.y0>=box.y0-h*.4&&w.bbox.y1<bottom);
@@ -1299,6 +1345,7 @@ function receiptLayout(data) {
     const number=word.receiptNumber??receiptDecimal(word.text);
     const type=(number<0||/^[−–-]/.test(word.text))?'expense':(/^\+/.test(word.text)||word.receiptPositive)?'income':'expense';
     const warnings=[];
+    if(!currency||word.receiptCurrencyUncertain)warnings.push('Проверь валюту: знак на скриншоте распознан неуверенно.');
     if(!date)warnings.push('Уточни дату: на скриншоте она относительная или обрезана.');
     if(number===null||word.receiptUncertain)warnings.push('Проверь сумму: мелкие цифры распознаны неуверенно.');
     const own=/transfer\s+[oо][f?]\s+own\s+funds|menjacnica/i.test(name);
@@ -1392,7 +1439,7 @@ function renderReceiptImport() {
   receiptImportDraft.forEach((item, index) => {
     const row = document.createElement('article');
     row.className = 'receipt-import-row';
-    row.innerHTML = '<label class="receipt-check"><input type="checkbox" checked aria-label="Добавить эту операцию"/><span></span></label><div class="receipt-import-fields"><input class="receipt-name" aria-label="Название операции"/><div class="receipt-compact-fields"><input class="receipt-date" type="date" aria-label="Дата операции"/><input class="receipt-amount" type="number" inputmode="decimal" min="0.01" step="0.01" aria-label="Сумма"/><select class="receipt-currency" aria-label="Валюта"><option>RSD</option><option>EUR</option><option>RUB</option><option>AMD</option></select></div><div class="receipt-compact-fields"><select class="receipt-type" aria-label="Тип операции"><option value="expense">Расход</option><option value="income">Доход</option></select><select class="receipt-category" aria-label="Категория"></select></div><small></small></div>';
+    row.innerHTML = '<label class="receipt-check"><input type="checkbox" checked aria-label="Добавить эту операцию"/><span></span></label><div class="receipt-import-fields"><input class="receipt-name" aria-label="Название операции"/><div class="receipt-compact-fields"><input class="receipt-date" type="date" aria-label="Дата операции"/><input class="receipt-amount" type="number" inputmode="decimal" min="0.01" step="0.01" aria-label="Сумма"/><select class="receipt-currency" aria-label="Валюта"><option value="">Уточни валюту</option><option>RSD</option><option>EUR</option><option>RUB</option><option>AMD</option></select></div><div class="receipt-compact-fields"><select class="receipt-type" aria-label="Тип операции"><option value="expense">Расход</option><option value="income">Доход</option></select><select class="receipt-category" aria-label="Категория"></select></div><small></small></div>';
     const checked = row.querySelector('input[type="checkbox"]');
     const setCategories = () => {
       const select = row.querySelector('.receipt-category');
@@ -1449,7 +1496,7 @@ async function startReceiptImport(file) {
     try {
       await worker.setParameters({tessedit_pageseg_mode: '6'});
       result = await worker.recognize(prepared);
-      if (/Mastercard[\s\S]{0,70}AMD/i.test(result.data.text || '')) {
+      if (/Mastercard[\s\S]{0,70}AMD|[\u0530-\u058f]|Подтверждено/i.test(result.data.text || '')) {
         await worker.reinitialize('rus+eng+hye');
         await worker.setParameters({tessedit_pageseg_mode:'6'});
         result = await worker.recognize(prepared);
@@ -1462,6 +1509,7 @@ async function startReceiptImport(file) {
         const latin = await worker.recognize(prepared);
         if (extractReceiptOcr(latin.data).length >= extractReceiptOcr(result.data).length) result = latin;
       }
+      await refineReceiptCurrencies(worker, prepared, result.data);
       await refineReceiptAmounts(worker, prepared, result.data);
       if (!extractReceiptOcr(result.data).length && prepared !== file) {
         await worker.setParameters({tessedit_pageseg_mode: '3'});
@@ -1489,8 +1537,8 @@ receiptImportInput?.addEventListener('change', event => startReceiptImport(event
 $('#receiptImportClose')?.addEventListener('click', () => { receiptImportRequest++; receiptImportReview.hidden = true; receiptImportDraft = []; receiptImportRows.innerHTML = ''; receiptImportSave.disabled = true; });
 receiptImportSave?.addEventListener('click', () => {
   const choices = receiptImportDraft.filter(item => item.selected && !item.blocked);
-  if (choices.some(item => !item.date || !Number.isFinite(Number(item.amount)) || Number(item.amount)<=0)) {
-    receiptImportStatus.textContent = 'Укажи корректную дату и сумму у всех выбранных строк.';
+  if (choices.some(item => !['EUR','AMD','RSD','RUB'].includes(item.currency) || !item.date || !Number.isFinite(Number(item.amount)) || Number(item.amount)<=0)) {
+    receiptImportStatus.textContent = 'Укажи корректные дату, сумму и валюту у всех выбранных строк.';
     return;
   }
   const selected = choices.map((item, index) => ({

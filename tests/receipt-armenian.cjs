@@ -1,0 +1,26 @@
+const {boot}=require('./harness.cjs'),assert=require('node:assert/strict');
+(async()=>{const h=await boot();try{
+ assert.equal(h.w.receiptAmountFromLine('Card + 12345 - 1/Name confirmed'),null);
+ assert.equal(h.w.receiptAmountFromLine('Personal transfer -2,000.00 <'),null);
+ assert.equal(h.w.receiptAmountFromLine('Fee -7,000.00 ֏').currency,'AMD');
+ const word=(text,x,y,w=100)=>({text,bbox:{x0:x,y0:y,x1:x+w,y1:y+40}});
+ const words=[],lines=[{text:'28 Октябрь 2026',bbox:{y0:1800}}];
+ const add=(name,amount,currency,y,uncertain=false)=>{words.push(word(name,245,y,500),{...word(amount,840,y,200),receiptCurrency:currency,receiptCurrencyUncertain:uncertain},word('?',1060,y,25),word('Подтверждено',790,y+65,290));};
+ add('Personal transfer','-2,000.00','EUR',600);
+ add('Գանձում փոխանցումից','-7,000.00','AMD',800,true);
+ add('Transfer of own funds','-8,000.00','AMD',1000,true);
+ add('Transfer of own funds','-20.00','EUR',1200);
+ add('Transfer to account','+3,200.00','EUR',1400);
+ add('Yandex Go','-5.37','EUR',1900);
+ add('Yandex Go','-0.54','',2100,true);
+ let rows=h.w.extractReceiptOcr({words,lines,text:'История Подтверждено'});
+ assert.equal(rows.length,7);
+ assert.deepEqual(Array.from(rows,x=>x.currency),['EUR','AMD','AMD','EUR','EUR','EUR','']);
+ assert.deepEqual(Array.from(rows,x=>x.amount),[2000,7000,8000,20,3200,5.37,.54]);
+ assert(rows.slice(0,5).every(x=>x.date===''&&!x.selected));
+ assert(rows[2].blocked&&rows[3].blocked);assert.equal(rows[4].type,'income');
+ assert.equal(rows[5].date,'2026-10-28');assert(rows[5].selected);
+ assert(!rows[6].selected);assert.match(rows[6].warning,/валюту/);
+ assert(!rows.some(x=>x.currency==='RSD'));
+ assert.deepEqual(h.errors,[]);console.log('PASS mixed EUR/AMD, no card-number amounts, missing dates, uncertain currency and own transfers');
+}finally{h.close()}})().catch(e=>{console.error(e);process.exitCode=1;});
