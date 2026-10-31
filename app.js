@@ -747,7 +747,30 @@ const budgetEntryCreatedAt = item => {
 let budgetDateOrder = 'newest';
 try { budgetDateOrder = localStorage.getItem('night-notes-budget-date-order') === 'oldest' ? 'oldest' : 'newest'; } catch {}
 const isoDate = date => date.toISOString().slice(0, 10);
+function salaryPeriods(entries = state.budget.transactions) {
+  const today = dateKey(new Date());
+  const dates = [...new Set(entries.filter(item => item.type === 'income' && String(item.category || '').trim().toLocaleLowerCase('ru') === 'зарплата' && Number(item.amount)>0 && /^\d{4}-\d{2}-\d{2}$/.test(item.date || '') && item.date <= today).map(item => item.date))].sort();
+  return dates.map((from,index) => {
+    const next = dates[index+1];
+    const end = next ? new Date(next+'T12:00:00') : null;
+    if(end)end.setDate(end.getDate()-1);
+    return {key:index===dates.length-1?'salary-current':`salary:${from}`,from,to:end?dateKey(end):today};
+  }).reverse();
+}
+function refreshSalaryOptions() {
+  const periods=salaryPeriods();
+  for(const id of ['budgetPeriod','chartPeriod']) {
+    const select=$('#'+id);if(!select)continue;
+    const selected=select.value;
+    select.querySelectorAll('option[data-salary-period]').forEach(option=>option.remove());
+    const anchor=select.querySelector('option[value="all"]');
+    periods.slice(1).forEach(period=>{const option=new Option(`С зарплаты ${period.from.split('-').reverse().join('.')} по ${period.to.split('-').reverse().join('.')}`,period.key);option.dataset.salaryPeriod='true';select.insertBefore(option,anchor);});
+    select.value=[...select.options].some(option=>option.value===selected)?selected:'salary-current';
+  }
+}
 const budgetPeriodLabel = ({ key, from, to }) => {
+  if(key==='salary-current')return from?`С зарплаты ${from.split('-').reverse().join('.')} по сегодня`:'Зарплата ещё не записана · показаны все операции';
+  if(key.startsWith('salary:'))return `${from.split('-').reverse().join('.')} — ${to.split('-').reverse().join('.')}`;
   if (key === 'all') return 'За всё время';
   if (key === 'today') return 'Сегодня';
   if (key === 'this-week') return 'Эта неделя · с понедельника';
@@ -756,7 +779,8 @@ const budgetPeriodLabel = ({ key, from, to }) => {
   return from && to ? `${from.split('-').reverse().join('.')} — ${to.split('-').reverse().join('.')}` : 'Свой период';
 };
 function selectedBudgetPeriod() {
-  const key = $('#budgetPeriod')?.value || 'all';
+  const key = $('#budgetPeriod')?.value || 'salary-current';
+  if(key==='salary-current'||key.startsWith('salary:'))return salaryPeriods().find(period=>period.key===key)||{key:'salary-current',from:'',to:''};
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   if (key === 'all') return { key, from: '', to: '' };
@@ -777,7 +801,7 @@ function selectedBudgetPeriod() {
 }
 function budgetTransactionsForSelectedPeriod(entries = state.budget.transactions) {
   const period = selectedBudgetPeriod();
-  if (period.key === 'all') return entries;
+  if (period.key === 'all' || (period.key==='salary-current'&&!period.from)) return entries;
   if(period.from && period.to && period.from>period.to)return [];
   return entries.filter(item => {
     const date = item.date || '';
@@ -785,6 +809,7 @@ function budgetTransactionsForSelectedPeriod(entries = state.budget.transactions
   });
 }
 function refreshBudgetPeriodControls() {
+  refreshSalaryOptions();
   const period = selectedBudgetPeriod();
   const custom = $('#budgetCustomRange');
   if (custom) custom.hidden = period.key !== 'custom';
@@ -2288,7 +2313,7 @@ function mountBudgetJourney() {
   });
 
   const applyLedgerView = () => {
-    const mode = $('#budgetLedgerFilter')?.value || 'all';
+    const mode = section.dataset.budgetPane==='expenses'?'expense':$('#budgetLedgerFilter')?.value || 'all';
     const needle = ($('#budgetLedgerSearch')?.value || '').trim().toLocaleLowerCase('ru');
     const entries = budgetEntriesByDate();
     let shown = 0;
@@ -2348,10 +2373,17 @@ function mountBudgetJourney() {
   $('#budgetCurrencyFilter').onchange = renderBudget;
   $('#budgetLedgerFilter').addEventListener('change', applyLedgerView);
   $('#budgetLedgerSearch').addEventListener('input', applyLedgerView);
+  section.querySelectorAll('[data-budget-pane]').forEach(button=>button.addEventListener('click',()=>{
+    section.dataset.budgetPane=button.dataset.budgetPane;
+    section.querySelectorAll('[data-budget-pane]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+    categoryFilter=null;
+    ledgerHead.querySelector('h3').textContent=button.dataset.budgetPane==='expenses'?'Расходы':'Операции';
+    applyLedgerView();
+  }));
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=60')) budgetStylesheet.href = 'styles.css?v=60';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=61')) budgetStylesheet.href = 'styles.css?v=61';
 mountBudgetJourney();
 renderBudget();
 

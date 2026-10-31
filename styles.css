@@ -911,3 +911,20 @@ button.health-quick-card { font:inherit; }
 .chart-period-controls select,.chart-period-controls input { width:100%; min-width:0; box-sizing:border-box; min-height:44px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fffaf4; color:var(--ink); font:inherit; font-size:16px; }
 #chartCustomRange:not([hidden]) { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; margin-top:10px; }
 #chartPeriodCaption { margin:8px 0 0; font-size:12px; line-height:1.45; color:var(--muted); }
+
+.budget-tabs { display:flex; gap:8px; margin:0 0 20px; }
+.budget-tabs button { flex:1; min-height:44px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--ink); font:inherit; padding:10px 16px; }
+.budget-tabs button[aria-pressed="true"] { background:#f6e7d3; border-color:var(--accent); }
+#budget[data-budget-pane="expenses"] .budget-summary,
+#budget[data-budget-pane="expenses"] .budget-entry-heading,
+#budget[data-budget-pane="expenses"] .budget-quick-actions,
+#budget[data-budget-pane="expenses"] .budget-flow-hint,
+#budget[data-budget-pane="expenses"] #budgetForm,
+#budget[data-budget-pane="expenses"] #receiptImportReview,
+#budget[data-budget-pane="expenses"] #budgetLedgerFilter { display:none; }
+.chart-period-controls { min-width:0; max-width:100%; }
+#chartCustomRange { min-width:0; }
+#chartCustomRange label { width:100%; overflow:hidden; }
+#chartCustomRange input[type="date"] { display:block; width:100%; max-width:100%; min-width:0; padding:10px 4px; -webkit-appearance:none; appearance:none; }
+#chartCustomRange input::-webkit-date-and-time-value { min-width:0; text-align:center; }
+@media(max-width:440px) { #chartCustomRange:not([hidden]) { grid-template-columns:minmax(0,1fr); } }
