@@ -928,3 +928,7 @@ button.health-quick-card { font:inherit; }
 #chartCustomRange input[type="date"] { display:block; width:100%; max-width:100%; min-width:0; padding:10px 4px; -webkit-appearance:none; appearance:none; }
 #chartCustomRange input::-webkit-date-and-time-value { min-width:0; text-align:center; }
 @media(max-width:440px) { #chartCustomRange:not([hidden]) { grid-template-columns:minmax(0,1fr); } }
+
+.chart-type-tabs { display:flex; gap:4px; padding:4px; margin:0 0 18px; background:#eee7dd; border-radius:12px; }
+.chart-type-tabs button { flex:1; min-width:0; min-height:44px; padding:9px 12px; border:0; border-radius:9px; background:transparent; color:var(--muted); font:inherit; }
+.chart-type-tabs button[aria-pressed="true"] { background:#fffaf4; color:var(--ink); box-shadow:0 1px 4px #35261918; }

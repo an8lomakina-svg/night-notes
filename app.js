@@ -2,8 +2,9 @@ const $ = (s) => document.querySelector(s);
 // Google Finance quotes: units of each currency per 1 EUR. Quote dates are explicit.
 const generalChartRates = { EUR: 1, RSD: 117.518516, RUB: 91.064623, AMD: 404.78625 };
 const generalChartQuoteDates = { RSD: '23.10.2026', RUB: '24.10.2026', AMD: '16.10.2026' };
+let budgetChartType = 'expense';
 function budgetChartIncludes(item, selected) {
-  return item.type === 'expense' && (selected === 'ALL' || (item.currency || 'RUB') === selected);
+  return item.type === budgetChartType && (selected === 'ALL' || (item.currency || 'RUB') === selected);
 }
 function budgetChartExpenses(transactions, selected) {
   return transactions.filter(item => budgetChartIncludes(item, selected)).map(item => ({
@@ -19,7 +20,12 @@ function renderGeneralChartNote(selected) {
     $('#budgetCurrencyFilter').closest('.utility-heading').after(note);
   }
   note.hidden = selected !== 'ALL';
-  note.textContent = 'Все расходы в EUR · тот же курс, что в итогах бюджета. 1 € = ' +
+  const income=budgetChartType==='income';
+  const title=$('.budget-chart-card h2');if(title)title.textContent=income?'Откуда приходят доходы':'Куда уходят расходы';
+  if($('#chartPeriodLabel'))$('#chartPeriodLabel').textContent=income?'Период доходов':'Период расходов';
+  if($('#chartPeriod'))$('#chartPeriod').setAttribute('aria-label',income?'Период доходов':'Период расходов');
+  document.querySelectorAll('[data-chart-type]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.chartType===budgetChartType)));
+  note.textContent = (income?'Все доходы':'Все расходы') + ' в EUR · тот же курс, что в итогах бюджета. 1 € = ' +
     ['RSD', 'RUB', 'AMD'].map(code => `${generalChartRates[code]} ${code}`).join(' · ');
 }
 
@@ -832,7 +838,7 @@ const budgetEntriesByDate = (entries = budgetTransactionsForSelectedPeriod()) =>
   if (leftCreated !== null && rightCreated !== null) return (leftCreated - rightCreated) * direction;
   return 0;
 });
-function renderBudget(){ refreshBudgetPeriodControls(); const tx=budgetTransactionsForSelectedPeriod();const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts=Object.create(null);filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>расходы</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${escapeBudgetCategory(key)}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction'+(item.type==='planned'?' transaction-planned':'');row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${accountLabel(item.fromAccount)} → ${accountLabel(item.toAccount)} · `:'';row.querySelector('small').textContent=`${item.type==='planned'?'Запланировано · ':''}${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':item.type==='planned'?'◷ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
+function renderBudget(){ refreshBudgetPeriodControls(); const tx=budgetTransactionsForSelectedPeriod();const code=x=>x.currency||'RUB';const totals=type=>{const result={};tx.filter(x=>x.type===type).forEach(x=>result[code(x)]=(result[code(x)]||0)+x.amount);return result};const moneySet=values=>Object.entries(values).map(([c,v])=>currency(v,c)).join(' · ')||'—';const income=totals('income'),expense=totals('expense'),balance={};new Set([...Object.keys(income),...Object.keys(expense)]).forEach(c=>balance[c]=(income[c]||0)-(expense[c]||0));$('#incomeTotal').textContent=moneySet(income);$('#expenseTotal').textContent=moneySet(expense);$('#balanceTotal').textContent=moneySet(balance);const selected=$('#budgetCurrencyFilter').value;const displayCurrency=selected==='ALL'?'EUR':selected;renderGeneralChartNote(selected);const filtered=budgetChartExpenses(tx,selected);const parts=Object.create(null);filtered.forEach(x=>parts[x.category]=(parts[x.category]||0)+x.amount);const colors=['#c87532','#ddb06b','#9aa881','#b9765e','#9f8aa0','#7f9eab','#b8a596'];const total=filtered.reduce((s,x)=>s+x.amount,0);let offset=0,stops=[];Object.entries(parts).forEach(([key,value],i)=>{const p=value/total*100;stops.push(`${colors[i%colors.length]} ${offset}% ${offset+p}%`);offset+=p});$('#budgetChart').style.background=total?`conic-gradient(${stops.join(',')})`:'conic-gradient(#eadfce 0 100%)';$('#budgetChart').innerHTML=`<span>${currency(total,displayCurrency)}<small>${budgetChartType==='income'?'доходы':'расходы'}</small></span>`;const legend=$('#chartLegend');legend.innerHTML='';Object.entries(parts).forEach(([key,value],i)=>{const row=document.createElement('div');row.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><span>${escapeBudgetCategory(key)}</span><strong>${currency(value,displayCurrency)}</strong>`;legend.append(row)});const list=$('#transactionList');list.innerHTML=tx.length?'':'<p class="empty">В истории пока нет операций.</p>';budgetEntriesByDate(tx).forEach(item=>{const row=document.createElement('div');row.className='transaction'+(item.type==='planned'?' transaction-planned':'');row.innerHTML='<div><strong></strong><small></small></div><span></span><button class="delete" aria-label="Удалить запись">×</button>';row.querySelector('strong').textContent=item.name;const route=item.type==='transfer'&&item.fromAccount&&item.toAccount?`${accountLabel(item.fromAccount)} → ${accountLabel(item.toAccount)} · `:'';row.querySelector('small').textContent=`${item.type==='planned'?'Запланировано · ':''}${route}${item.category} · ${item.date||'без даты'}`;row.querySelector('span').textContent=(item.type==='income'?'+ ':item.type==='transfer'?'↔ ':item.type==='planned'?'◷ ':'− ')+currency(item.amount,code(item));row.querySelector('span').className=item.type;row.querySelector('.delete').onclick=()=>{removeItem(tx,item.id);renderBudget()};list.append(row)});}
 $('#transactionDate').value=new Date().toISOString().slice(0,10);
 $('#budgetCurrencyFilter').onchange=renderBudget;
 const budgetPeriodControl = $('#budgetPeriod');
@@ -2297,7 +2303,7 @@ function mountBudgetJourney() {
     const hasExpenses = budgetTransactionsForSelectedPeriod().some(item => budgetChartIncludes(item, selectedCurrency));
     if (chartWrap) chartWrap.hidden = !hasExpenses;
     chartEmpty.hidden = hasExpenses;
-    chartEmpty.textContent = 'За выбранный период в этой валюте расходов нет.';
+    chartEmpty.textContent = `За выбранный период в этой валюте ${budgetChartType==='income'?'доходов':'расходов'} нет.`;
   };
 
   const typeSelect = $('#transactionType');
@@ -2313,7 +2319,7 @@ function mountBudgetJourney() {
   });
 
   const applyLedgerView = () => {
-    const mode = section.dataset.budgetPane==='expenses'?'expense':$('#budgetLedgerFilter')?.value || 'all';
+    const mode = section.dataset.budgetPane==='expenses'?budgetChartType:$('#budgetLedgerFilter')?.value || 'all';
     const needle = ($('#budgetLedgerSearch')?.value || '').trim().toLocaleLowerCase('ru');
     const entries = budgetEntriesByDate();
     let shown = 0;
@@ -2354,7 +2360,7 @@ function mountBudgetJourney() {
     chart.title = 'Нажмите на сектор, чтобы показать операции этой категории';
     chart.tabIndex = 0;
     chart.setAttribute('role', 'button');
-    chart.setAttribute('aria-label', 'Диаграмма расходов: нажмите на сектор, чтобы отфильтровать операции');
+    chart.setAttribute('aria-label', `Диаграмма ${budgetChartType==='income'?'доходов':'расходов'}: нажмите на сектор, чтобы отфильтровать операции`);
     chart.onclick = event => {
       const rect = chart.getBoundingClientRect();
       const dx = event.clientX - rect.left - rect.width / 2;
@@ -2369,21 +2375,22 @@ function mountBudgetJourney() {
   };
   const baseBudgetRender = renderBudget;
   let lastChartPeriod = '';
-  renderBudget = () => { const period=JSON.stringify(selectedBudgetPeriod());if(period!==lastChartPeriod){categoryFilter=null;lastChartPeriod=period;}baseBudgetRender(); updateChartEmptyState(); bindCategoryFilter(); applyLedgerView(); };
+  renderBudget = () => { const period=JSON.stringify([selectedBudgetPeriod(),budgetChartType]);if(period!==lastChartPeriod){categoryFilter=null;lastChartPeriod=period;}baseBudgetRender(); updateChartEmptyState(); bindCategoryFilter(); applyLedgerView(); };
   $('#budgetCurrencyFilter').onchange = renderBudget;
+  section.querySelectorAll('[data-chart-type]').forEach(button=>button.addEventListener('click',()=>{budgetChartType=button.dataset.chartType==='income'?'income':'expense';categoryFilter=null;ledgerHead.querySelector('h3').textContent=section.dataset.budgetPane==='expenses'?(budgetChartType==='income'?'Доходы':'Расходы'):'Операции';renderBudget();}));
   $('#budgetLedgerFilter').addEventListener('change', applyLedgerView);
   $('#budgetLedgerSearch').addEventListener('input', applyLedgerView);
   section.querySelectorAll('[data-budget-pane]').forEach(button=>button.addEventListener('click',()=>{
     section.dataset.budgetPane=button.dataset.budgetPane;
     section.querySelectorAll('[data-budget-pane]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
     categoryFilter=null;
-    ledgerHead.querySelector('h3').textContent=button.dataset.budgetPane==='expenses'?'Расходы':'Операции';
+    ledgerHead.querySelector('h3').textContent=button.dataset.budgetPane==='expenses'?(budgetChartType==='income'?'Доходы':'Расходы'):'Операции';
     applyLedgerView();
   }));
   applyLedgerView();
 }
 const budgetStylesheet = document.querySelector('link[href*="styles.css"]');
-if (budgetStylesheet && !budgetStylesheet.href.includes('v=61')) budgetStylesheet.href = 'styles.css?v=61';
+if (budgetStylesheet && !budgetStylesheet.href.includes('v=62')) budgetStylesheet.href = 'styles.css?v=62';
 mountBudgetJourney();
 renderBudget();
 
